@@ -9,10 +9,6 @@ export default function ChatsScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Chats</Text>
-      </View>
-
       <FlatList
         data={chats}
         keyExtractor={(item) => item.id}
@@ -49,14 +45,6 @@ export default function ChatsScreen() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#FFFFFF' },
-  header: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E6EBF2',
-  },
-  title: { fontSize: 30, fontWeight: '800', color: '#1A2B44' },
   content: { paddingVertical: 8 },
   chatRow: {
     flexDirection: 'row',

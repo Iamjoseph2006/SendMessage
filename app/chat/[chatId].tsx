@@ -1,10 +1,22 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useLocalSearchParams } from 'expo-router';
-import { FlatList, Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useMemo, useRef, useState } from 'react';
+import {
+  Animated,
+  FlatList,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { chatSummaries } from '@/src/data/mock/mockData';
 import { Message } from '@/src/domain/entities';
 import { useConversationViewModel } from '@/src/presentation/viewmodels/useConversationViewModel';
-import { useState } from 'react';
 
 const statusIcon = (status: Message['status']) => {
   if (status === 'read') return { name: 'checkmark-done', color: '#1F7AE0' } as const;
@@ -12,83 +24,165 @@ const statusIcon = (status: Message['status']) => {
   return { name: 'checkmark', color: '#97A8BE' } as const;
 };
 
-const quickActions = [
-  { id: 'doc', label: 'Documento', text: '📎 Documento adjunto' },
-  { id: 'img', label: 'Imagen', text: '🖼️ Imagen enviada' },
-  { id: 'camera', label: 'Cámara', text: '📷 Foto tomada y enviada' },
-  { id: 'audio', label: 'Audio', text: '🎤 Audio (00:12)' },
-  { id: 'location', label: 'Ubicación', text: '📍 Ubicación en tiempo real compartida' },
-  { id: 'emoji', label: '😊 Emoji', text: '😊' },
-];
+const attachActions = [
+  { id: 'doc', icon: 'document-text-outline', label: 'Documento' },
+  { id: 'gallery', icon: 'images-outline', label: 'Galería' },
+  { id: 'camera', icon: 'camera-outline', label: 'Cámara' },
+  { id: 'audio', icon: 'mic-outline', label: 'Audio' },
+  { id: 'location', icon: 'location-outline', label: 'Ubicación' },
+] as const;
+
+const mockFiles = ['Contrato.pdf', 'PlanProyecto.docx', 'Resumen.xlsx'];
+const mockPhotos = ['IMG_1024.JPG', 'IMG_1025.JPG', 'IMG_1026.JPG'];
+
+const formatTime = () => {
+  const now = new Date();
+  return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+};
 
 export default function ConversationScreen() {
   const { chatId } = useLocalSearchParams<{ chatId: string }>();
   const { messages, input, setInput, canSend, sendText, sendTemplateMessage } =
     useConversationViewModel(chatId);
-  const [showActions, setShowActions] = useState(false);
+
+  const [showAttach, setShowAttach] = useState(false);
+  const [pickerType, setPickerType] = useState<'none' | 'doc' | 'gallery' | 'camera'>('none');
+  const [isRecording, setIsRecording] = useState(false);
+  const recordingPulse = useRef(new Animated.Value(1)).current;
+  const inputRef = useRef<TextInput>(null);
 
   const chatName = chatSummaries.find((chat) => chat.id === chatId)?.name ?? 'Chat';
+  const pickerItems = useMemo(() => {
+    if (pickerType === 'doc') return mockFiles;
+    return mockPhotos;
+  }, [pickerType]);
+
+  const pushAttachment = (kind: 'doc' | 'gallery' | 'camera', name: string) => {
+    const prefix = kind === 'doc' ? '📄 Documento' : kind === 'gallery' ? '🖼️ Imagen' : '📷 Foto';
+    sendTemplateMessage(`${prefix}: ${name}`);
+    setPickerType('none');
+    setShowAttach(false);
+  };
+
+  const handleAction = (id: (typeof attachActions)[number]['id']) => {
+    if (id === 'doc') setPickerType('doc');
+    if (id === 'gallery') setPickerType('gallery');
+    if (id === 'camera') setPickerType('camera');
+    if (id === 'location') {
+      sendTemplateMessage(`📍 Ubicación compartida · ${formatTime()}`);
+      setShowAttach(false);
+    }
+    if (id === 'audio') {
+      if (isRecording) {
+        setIsRecording(false);
+        recordingPulse.stopAnimation();
+        sendTemplateMessage('🎤 Audio (00:12)');
+      } else {
+        setIsRecording(true);
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(recordingPulse, { toValue: 1.2, duration: 450, useNativeDriver: true }),
+            Animated.timing(recordingPulse, { toValue: 1, duration: 450, useNativeDriver: true }),
+          ]),
+        ).start();
+      }
+      setShowAttach(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.header}>
-        <Text style={styles.headerName}>{chatName}</Text>
-        <Text style={styles.headerSubtitle}>En línea</Text>
-      </View>
-
-      <FlatList
-        style={styles.list}
-        contentContainerStyle={styles.listContent}
-        data={messages}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => {
-          const icon = statusIcon(item.status);
-          return (
-            <View style={[styles.bubble, item.sender === 'me' ? styles.me : styles.contact]}>
-              <Text style={[styles.bubbleText, item.sender === 'me' && styles.meText]}>{item.text}</Text>
-              <View style={styles.rowMeta}>
-                <Text style={styles.time}>{item.time}</Text>
-                {item.sender === 'me' ? <Ionicons name={icon.name} size={14} color={icon.color} /> : null}
-              </View>
-            </View>
-          );
-        }}
-      />
-
-      {showActions ? (
-        <View style={styles.actionPanel}>
-          {quickActions.map((action) => (
-            <Pressable
-              key={action.id}
-              style={styles.actionButton}
-              onPress={() => {
-                sendTemplateMessage(action.text);
-                setShowActions(false);
-              }}>
-              <Text style={styles.actionText}>{action.label}</Text>
-            </Pressable>
-          ))}
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.safeArea}>
+        <View style={styles.header}>
+          <Text style={styles.headerName}>{chatName}</Text>
+          <Text style={styles.headerSubtitle}>En línea</Text>
         </View>
-      ) : null}
 
-      <View style={styles.composer}>
-        <Pressable style={styles.smallButton} onPress={() => setShowActions((prev) => !prev)}>
-          <Ionicons name="add" size={20} color="#1F7AE0" />
-        </Pressable>
-        <TextInput
-          style={styles.input}
-          placeholder="Mensaje"
-          placeholderTextColor="#8C9DB0"
-          value={input}
-          onChangeText={setInput}
+        <FlatList
+          style={styles.list}
+          contentContainerStyle={styles.listContent}
+          data={messages}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => {
+            const icon = statusIcon(item.status);
+            return (
+              <View style={[styles.bubble, item.sender === 'me' ? styles.me : styles.contact]}>
+                <Text style={[styles.bubbleText, item.sender === 'me' && styles.meText]}>{item.text}</Text>
+                <View style={styles.rowMeta}>
+                  <Text style={styles.time}>{item.time}</Text>
+                  {item.sender === 'me' ? <Ionicons name={icon.name} size={14} color={icon.color} /> : null}
+                </View>
+              </View>
+            );
+          }}
         />
-        <Pressable style={styles.smallButton} onPress={() => sendTemplateMessage('😊')}>
-          <Ionicons name="happy-outline" size={19} color="#1F7AE0" />
-        </Pressable>
-        <Pressable style={styles.sendButton} disabled={!canSend} onPress={sendText}>
-          <Ionicons name="send" size={16} color="#FFF" />
-        </Pressable>
-      </View>
+
+        {showAttach ? (
+          <View style={styles.actionPanel}>
+            {attachActions.map((action) => (
+              <Pressable key={action.id} style={styles.actionButton} onPress={() => handleAction(action.id)}>
+                <Ionicons name={action.icon} size={20} color="#1F7AE0" />
+                <Text style={styles.actionText}>{action.label}</Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
+
+        <View style={styles.composer}>
+          <Pressable style={styles.smallButton} onPress={() => setShowAttach((prev) => !prev)}>
+            <Ionicons name="attach" size={19} color="#1F7AE0" />
+          </Pressable>
+          <Pressable
+            style={styles.smallButton}
+            onPress={() => {
+              inputRef.current?.focus();
+              setInput((prev) => `${prev}😊`);
+            }}>
+            <Ionicons name="happy-outline" size={19} color="#1F7AE0" />
+          </Pressable>
+          <TextInput
+            ref={inputRef}
+            style={styles.input}
+            placeholder="Mensaje"
+            placeholderTextColor="#8C9DB0"
+            value={input}
+            onChangeText={setInput}
+            multiline
+            textAlignVertical="top"
+          />
+          <Pressable style={styles.sendButton} disabled={!canSend} onPress={sendText}>
+            <Ionicons name="send" size={16} color="#FFF" />
+          </Pressable>
+        </View>
+
+        {isRecording ? (
+          <Animated.View style={[styles.recordingBadge, { transform: [{ scale: recordingPulse }] }]}>
+            <Ionicons name="mic" size={14} color="#FFFFFF" />
+            <Text style={styles.recordingText}>Grabando audio…</Text>
+          </Animated.View>
+        ) : null}
+
+        <Modal visible={pickerType !== 'none'} transparent animationType="slide" onRequestClose={() => setPickerType('none')}>
+          <View style={styles.modalBackdrop}>
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>
+                {pickerType === 'doc' ? 'Seleccionar documento' : pickerType === 'camera' ? 'Tomar foto' : 'Seleccionar imagen'}
+              </Text>
+              {pickerItems.map((item) => {
+                const kind = pickerType === 'none' ? 'gallery' : pickerType;
+                return (
+                <Pressable key={item} style={styles.modalOption} onPress={() => pushAttachment(kind, item)}>
+                  <Text style={styles.modalOptionText}>{item}</Text>
+                </Pressable>
+                );
+              })}
+              <Pressable style={styles.modalClose} onPress={() => setPickerType('none')}>
+                <Text style={styles.modalCloseText}>Cancelar</Text>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -105,7 +199,7 @@ const styles = StyleSheet.create({
   headerName: { color: '#1A2B44', fontWeight: '700', fontSize: 18 },
   headerSubtitle: { color: '#6A7D95', marginTop: 2, fontSize: 13 },
   list: { flex: 1, backgroundColor: '#F8FBFF' },
-  listContent: { padding: 12, gap: 10 },
+  listContent: { padding: 12, gap: 10, paddingBottom: 30 },
   bubble: { maxWidth: '82%', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 8 },
   me: { alignSelf: 'flex-end', backgroundColor: '#DDF0FF' },
   contact: { alignSelf: 'flex-start', backgroundColor: '#FFF', borderWidth: 1, borderColor: '#E3EAF4' },
@@ -115,20 +209,23 @@ const styles = StyleSheet.create({
   time: { color: '#7388A4', fontSize: 11 },
   composer: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     gap: 8,
     paddingHorizontal: 10,
     paddingVertical: 10,
     borderTopWidth: 1,
     borderTopColor: '#E6EBF2',
+    backgroundColor: '#FFF',
   },
   input: {
     flex: 1,
+    minHeight: 40,
+    maxHeight: 108,
     borderWidth: 1,
     borderColor: '#D8E1EE',
-    borderRadius: 16,
+    borderRadius: 18,
     paddingHorizontal: 12,
-    paddingVertical: 9,
+    paddingVertical: 10,
     fontSize: 15,
     backgroundColor: '#FFF',
   },
@@ -139,6 +236,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ECF4FF',
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 2,
   },
   sendButton: {
     width: 36,
@@ -147,23 +245,58 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#1F7AE0',
+    marginBottom: 1,
   },
   actionPanel: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 10,
     paddingHorizontal: 10,
-    paddingTop: 8,
-    paddingBottom: 4,
+    paddingTop: 10,
+    paddingBottom: 8,
     backgroundColor: '#FFF',
     borderTopWidth: 1,
     borderTopColor: '#E6EBF2',
   },
   actionButton: {
+    width: 80,
+    alignItems: 'center',
+    gap: 5,
     backgroundColor: '#ECF4FF',
     borderRadius: 14,
-    paddingHorizontal: 10,
     paddingVertical: 8,
   },
-  actionText: { color: '#1F4E83', fontSize: 13, fontWeight: '600' },
+  actionText: { color: '#1F4E83', fontSize: 12, fontWeight: '600' },
+  recordingBadge: {
+    position: 'absolute',
+    right: 18,
+    bottom: 72,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#1F7AE0',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  recordingText: { color: '#FFFFFF', fontWeight: '600', fontSize: 12 },
+  modalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(24,36,53,0.4)' },
+  modalCard: {
+    backgroundColor: '#FFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 24,
+    gap: 8,
+  },
+  modalTitle: { fontSize: 16, fontWeight: '700', color: '#22354D', marginBottom: 8 },
+  modalOption: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEF2F7',
+  },
+  modalOptionText: { color: '#1E3856', fontSize: 15 },
+  modalClose: { marginTop: 8, backgroundColor: '#ECF4FF', borderRadius: 12, paddingVertical: 11, alignItems: 'center' },
+  modalCloseText: { color: '#1F7AE0', fontWeight: '700' },
 });

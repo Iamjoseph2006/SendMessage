@@ -19,35 +19,35 @@ export default function TabLayout() {
           fontWeight: '600',
         },
         headerStyle: { backgroundColor: '#FFFFFF' },
-        headerTitleStyle: { color: '#1A2B44', fontWeight: '700' },
+        headerTitleStyle: { color: '#1A2B44', fontWeight: '700', fontSize: 20 },
+        headerShadowVisible: false,
       }}>
       <Tabs.Screen
         name="index"
         options={{
           title: 'Chats',
-          tabBarIcon: ({ color }) => <Ionicons size={26} name="chatbubble-ellipses" color={color} />,
-          headerShown: false,
+          tabBarIcon: ({ color }) => <Ionicons size={24} name="chatbubble-ellipses" color={color} />,
         }}
       />
       <Tabs.Screen
         name="calls"
         options={{
           title: 'Llamadas',
-          tabBarIcon: ({ color }) => <Ionicons size={26} name="call" color={color} />,
+          tabBarIcon: ({ color }) => <Ionicons size={24} name="call" color={color} />,
         }}
       />
       <Tabs.Screen
         name="status"
         options={{
           title: 'Estados',
-          tabBarIcon: ({ color }) => <Ionicons size={26} name="radio" color={color} />,
+          tabBarIcon: ({ color }) => <Ionicons size={24} name="radio" color={color} />,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
           title: 'Perfil',
-          tabBarIcon: ({ color }) => <Ionicons size={26} name="person" color={color} />,
+          tabBarIcon: ({ color }) => <Ionicons size={24} name="person" color={color} />,
         }}
       />
     </Tabs>
