@@ -1,16 +1,18 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useRouter } from 'expo-router';
 import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import { useProfileViewModel } from '@/src/presentation/viewmodels/useProfileViewModel';
 
 const options = [
-  { id: 'o1', icon: 'notifications-outline', label: 'Notificaciones' },
-  { id: 'o2', icon: 'lock-closed-outline', label: 'Privacidad' },
-  { id: 'o3', icon: 'color-palette-outline', label: 'Apariencia' },
-  { id: 'o4', icon: 'help-circle-outline', label: 'Ayuda' },
+  { id: 'notifications', icon: 'notifications-outline', label: 'Notificaciones' },
+  { id: 'privacy', icon: 'lock-closed-outline', label: 'Privacidad' },
+  { id: 'appearance', icon: 'color-palette-outline', label: 'Apariencia' },
+  { id: 'help', icon: 'help-circle-outline', label: 'Ayuda' },
 ] as const;
 
 export default function ProfileScreen() {
   const { profile } = useProfileViewModel();
+  const router = useRouter();
 
   if (!profile) return null;
 
@@ -27,7 +29,7 @@ export default function ProfileScreen() {
         </View>
 
         {options.map((option) => (
-          <Pressable key={option.id} style={styles.optionRow}>
+          <Pressable key={option.id} style={styles.optionRow} onPress={() => router.push(`/profile/${option.id}`)}>
             <Ionicons name={option.icon} size={20} color="#1F7AE0" />
             <Text style={styles.optionText}>{option.label}</Text>
             <Ionicons name="chevron-forward" size={18} color="#A1AFC1" />

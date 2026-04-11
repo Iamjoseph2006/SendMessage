@@ -13,6 +13,7 @@ export default function RootLayout() {
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="chat/[chatId]" options={{ headerShown: false }} />
+        <Stack.Screen name="profile/[section]" options={{ headerBackTitle: 'Perfil' }} />
       </Stack>
       <StatusBar style="dark" />
     </ThemeProvider>
