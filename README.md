@@ -1,47 +1,43 @@
-# SendMessage MVP (Expo + React Native)
+# SendMessage
 
-Prototipo funcional inicial de **SendMessage**, inspirado en experiencias de WhatsApp, Instagram y Telegram, con una interfaz azul estilo clásico de iPhone.
+Este repositorio ahora incluye una base **iOS nativa en SwiftUI** con **Clean Architecture + MVVM** y backend en **Firebase** para mensajería en tiempo real.
 
-## Qué incluye este MVP
+## Arquitectura implementada
 
-- Registro e inicio de sesión local (flujo UI completo).
-- Chat en tiempo real simulado (envío inmediato + respuesta automática asíncrona).
-- Base de interfaz para historias, canales y comunidades.
-- Diseño minimalista orientado a iOS.
+Estructura en `ios/SendMessage/`:
 
-> Nota: este repositorio usa Expo/React Native como base inicial de prototipado rápido. El siguiente paso recomendado es portar módulos clave a SwiftUI nativo y conectar backend real para producción.
+- **Presentation**: Views + ViewModels (`AuthView`, `ChatListView`, `ChatView`).
+- **Domain**: Entities, Repositories (protocolos), UseCases.
+- **Data**: Implementaciones de repositorios y DataSources Firebase (Auth, Firestore, Storage).
+- **Core/DI**: Contenedor de dependencias (`AppContainer`).
 
-## Estructura principal
+## UseCases incluidos
 
-- `app/(tabs)/index.tsx`: autenticación + chat principal.
-- `app/(tabs)/explore.tsx`: historias y comunidades.
-- `app/(tabs)/_layout.tsx`: navegación y estilo global de tabs.
+- `RegisterUserUseCase`
+- `LoginUserUseCase`
+- `SendMessageUseCase`
+- `ReceiveMessagesUseCase` (listener tiempo real)
+- `CreateChatUseCase`
+- `CreateGroupUseCase`
+- `UploadMediaUseCase`
+- `FetchUserChatsUseCase`
 
-## Ejecutar en local
+## Backend y seguridad
 
-1. Instalar dependencias:
+- DataSources conectados a `FirebaseAuth`, `Firestore`, `Storage`.
+- Modelo de datos documentado en `ios/SendMessage/Config/FirestoreModel.md`.
+- Reglas de seguridad base en `backend/firestore.rules`.
 
-```bash
-npm install
-```
+## UI/UX aplicada (MVP)
 
-2. Ejecutar:
+- Fondo principal blanco.
+- Azul como color primario para botones, iconos y highlights.
+- Flujo funcional: registro/login → lista de chats → conversación en tiempo real.
+- Estado de mensaje: `sent`, `delivered`, `read`.
 
-```bash
-npm run ios
-```
+## Integración pendiente sugerida
 
-o
-
-```bash
-npm run start
-```
-
-## Próximos pasos sugeridos (camino a producción)
-
-1. Integrar backend real-time (Firebase/Supabase/Node + WebSockets).
-2. APNs para notificaciones push.
-3. Auth con email/teléfono/OAuth.
-4. Cifrado de extremo a extremo para mensajes.
-5. Llamadas de voz y video (WebRTC).
-6. Migración gradual a módulos nativos SwiftUI para iOS.
+1. Login con Apple/Google (el contrato existe, falta implementación completa).
+2. Notificaciones push APNs/FCM.
+3. Indicador “escribiendo...” y presencia online/offline en Firestore.
+4. E2E encryption en capa de dominio/crypto.
