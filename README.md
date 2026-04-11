@@ -1,50 +1,47 @@
-# Welcome to your Expo app 👋
+# SendMessage MVP (Expo + React Native)
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Prototipo funcional inicial de **SendMessage**, inspirado en experiencias de WhatsApp, Instagram y Telegram, con una interfaz azul estilo clásico de iPhone.
 
-## Get started
+## Qué incluye este MVP
 
-1. Install dependencies
+- Registro e inicio de sesión local (flujo UI completo).
+- Chat en tiempo real simulado (envío inmediato + respuesta automática asíncrona).
+- Base de interfaz para historias, canales y comunidades.
+- Diseño minimalista orientado a iOS.
 
-   ```bash
-   npm install
-   ```
+> Nota: este repositorio usa Expo/React Native como base inicial de prototipado rápido. El siguiente paso recomendado es portar módulos clave a SwiftUI nativo y conectar backend real para producción.
 
-2. Start the app
+## Estructura principal
 
-   ```bash
-   npx expo start
-   ```
+- `app/(tabs)/index.tsx`: autenticación + chat principal.
+- `app/(tabs)/explore.tsx`: historias y comunidades.
+- `app/(tabs)/_layout.tsx`: navegación y estilo global de tabs.
 
-In the output, you'll find options to open the app in a
+## Ejecutar en local
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+1. Instalar dependencias:
 
 ```bash
-npm run reset-project
+npm install
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+2. Ejecutar:
 
-## Learn more
+```bash
+npm run ios
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+o
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+```bash
+npm run start
+```
 
-## Join the community
+## Próximos pasos sugeridos (camino a producción)
 
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+1. Integrar backend real-time (Firebase/Supabase/Node + WebSockets).
+2. APNs para notificaciones push.
+3. Auth con email/teléfono/OAuth.
+4. Cifrado de extremo a extremo para mensajes.
+5. Llamadas de voz y video (WebRTC).
+6. Migración gradual a módulos nativos SwiftUI para iOS.
