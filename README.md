@@ -1,50 +1,43 @@
-# Welcome to your Expo app 👋
+# SendMessage
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Este repositorio ahora incluye una base **iOS nativa en SwiftUI** con **Clean Architecture + MVVM** y backend en **Firebase** para mensajería en tiempo real.
 
-## Get started
+## Arquitectura implementada
 
-1. Install dependencies
+Estructura en `ios/SendMessage/`:
 
-   ```bash
-   npm install
-   ```
+- **Presentation**: Views + ViewModels (`AuthView`, `ChatListView`, `ChatView`).
+- **Domain**: Entities, Repositories (protocolos), UseCases.
+- **Data**: Implementaciones de repositorios y DataSources Firebase (Auth, Firestore, Storage).
+- **Core/DI**: Contenedor de dependencias (`AppContainer`).
 
-2. Start the app
+## UseCases incluidos
 
-   ```bash
-   npx expo start
-   ```
+- `RegisterUserUseCase`
+- `LoginUserUseCase`
+- `SendMessageUseCase`
+- `ReceiveMessagesUseCase` (listener tiempo real)
+- `CreateChatUseCase`
+- `CreateGroupUseCase`
+- `UploadMediaUseCase`
+- `FetchUserChatsUseCase`
 
-In the output, you'll find options to open the app in a
+## Backend y seguridad
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+- DataSources conectados a `FirebaseAuth`, `Firestore`, `Storage`.
+- Modelo de datos documentado en `ios/SendMessage/Config/FirestoreModel.md`.
+- Reglas de seguridad base en `backend/firestore.rules`.
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+## UI/UX aplicada (MVP)
 
-## Get a fresh project
+- Fondo principal blanco.
+- Azul como color primario para botones, iconos y highlights.
+- Flujo funcional: registro/login → lista de chats → conversación en tiempo real.
+- Estado de mensaje: `sent`, `delivered`, `read`.
 
-When you're ready, run:
+## Integración pendiente sugerida
 
-```bash
-npm run reset-project
-```
-
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+1. Login con Apple/Google (el contrato existe, falta implementación completa).
+2. Notificaciones push APNs/FCM.
+3. Indicador “escribiendo...” y presencia online/offline en Firestore.
+4. E2E encryption en capa de dominio/crypto.
