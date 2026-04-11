@@ -1,34 +1,53 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Tabs } from 'expo-router';
-import React from 'react';
 
 export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: '#1f7ae0',
-        tabBarInactiveTintColor: '#8a98ab',
+        tabBarActiveTintColor: '#1F7AE0',
+        tabBarInactiveTintColor: '#8A98AB',
         tabBarStyle: {
-          backgroundColor: '#ffffff',
-          borderTopColor: '#e6ebf2',
+          backgroundColor: '#FFFFFF',
+          borderTopColor: '#E6EBF2',
+          height: 70,
+          paddingBottom: 8,
+          paddingTop: 8,
         },
-        headerStyle: { backgroundColor: '#ffffff' },
-        headerTitleStyle: { color: '#1a2b44' },
-        headerTintColor: '#1a2b44',
+        tabBarLabelStyle: {
+          fontSize: 12,
+          fontWeight: '600',
+        },
+        headerStyle: { backgroundColor: '#FFFFFF' },
+        headerTitleStyle: { color: '#1A2B44', fontWeight: '700' },
       }}>
       <Tabs.Screen
         name="index"
         options={{
           title: 'Chats',
-          tabBarIcon: ({ color }) => <Ionicons size={22} name="chatbubble-ellipses" color={color} />,
+          tabBarIcon: ({ color }) => <Ionicons size={26} name="chatbubble-ellipses" color={color} />,
           headerShown: false,
         }}
       />
       <Tabs.Screen
-        name="explore"
+        name="calls"
         options={{
-          title: 'Comunidades',
-          tabBarIcon: ({ color }) => <Ionicons size={22} name="people" color={color} />,
+          title: 'Llamadas',
+          tabBarIcon: ({ color }) => <Ionicons size={26} name="call" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="status"
+        options={{
+          title: 'Estados',
+          tabBarIcon: ({ color }) => <Ionicons size={26} name="radio" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: 'Perfil',
+          tabBarIcon: ({ color }) => <Ionicons size={26} name="person" color={color} />,
         }}
       />
     </Tabs>

@@ -12,6 +12,7 @@ export default function RootLayout() {
     <ThemeProvider value={DefaultTheme}>
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="chat/[chatId]" options={{ headerShown: false }} />
       </Stack>
       <StatusBar style="dark" />
     </ThemeProvider>
