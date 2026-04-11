@@ -1,43 +1,23 @@
 # SendMessage
 
-Este repositorio ahora incluye una base **iOS nativa en SwiftUI** con **Clean Architecture + MVVM** y backend en **Firebase** para mensajería en tiempo real.
+Aplicación móvil con Expo Router enfocada en un **MVP de mensajería local**.
 
-## Arquitectura implementada
+## Estado actual del proyecto
 
-Estructura en `ios/SendMessage/`:
+- Interfaz renovada con base visual **blanca** y acentos azules.
+- Flujo de chat funcional en memoria local (sin backend y sin base de datos).
+- Pantalla de exploración con historias y comunidades de ejemplo.
+- Login y registro **fuera de alcance por ahora**.
 
-- **Presentation**: Views + ViewModels (`AuthView`, `ChatListView`, `ChatView`).
-- **Domain**: Entities, Repositories (protocolos), UseCases.
-- **Data**: Implementaciones de repositorios y DataSources Firebase (Auth, Firestore, Storage).
-- **Core/DI**: Contenedor de dependencias (`AppContainer`).
+## Estructura principal
 
-## UseCases incluidos
+- `app/(tabs)/index.tsx`: Chat principal local con respuestas automáticas.
+- `app/(tabs)/explore.tsx`: Vista de historias y canales/comunidades.
+- `app/(tabs)/_layout.tsx`: Navegación por pestañas con estilo blanco.
+- `app/_layout.tsx`: Layout raíz de navegación.
 
-- `RegisterUserUseCase`
-- `LoginUserUseCase`
-- `SendMessageUseCase`
-- `ReceiveMessagesUseCase` (listener tiempo real)
-- `CreateChatUseCase`
-- `CreateGroupUseCase`
-- `UploadMediaUseCase`
-- `FetchUserChatsUseCase`
+## Siguiente paso sugerido (sin auth)
 
-## Backend y seguridad
-
-- DataSources conectados a `FirebaseAuth`, `Firestore`, `Storage`.
-- Modelo de datos documentado en `ios/SendMessage/Config/FirestoreModel.md`.
-- Reglas de seguridad base en `backend/firestore.rules`.
-
-## UI/UX aplicada (MVP)
-
-- Fondo principal blanco.
-- Azul como color primario para botones, iconos y highlights.
-- Flujo funcional: registro/login → lista de chats → conversación en tiempo real.
-- Estado de mensaje: `sent`, `delivered`, `read`.
-
-## Integración pendiente sugerida
-
-1. Login con Apple/Google (el contrato existe, falta implementación completa).
-2. Notificaciones push APNs/FCM.
-3. Indicador “escribiendo...” y presencia online/offline en Firestore.
-4. E2E encryption en capa de dominio/crypto.
+1. Definir capa de servicios para API/Realtime (sin acoplarla todavía a UI).
+2. Normalizar modelos de datos (`chat`, `message`, `community`).
+3. Agregar estado global (por ejemplo Zustand/Redux Toolkit) para preparar integración de backend.
