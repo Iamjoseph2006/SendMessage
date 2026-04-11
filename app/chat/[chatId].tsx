@@ -2,9 +2,12 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useLocalSearchParams } from 'expo-router';
 import { useMemo, useRef, useState } from 'react';
 import {
+  ActionSheetIOS,
+  Alert,
   Animated,
   FlatList,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -32,6 +35,8 @@ const attachActions = [
   { id: 'location', icon: 'location-outline', label: 'Ubicación' },
 ] as const;
 
+const messageActions = ['Responder', 'Reenviar', 'Copiar', 'Destacar', 'Eliminar', 'Fijar', 'Traducir'] as const;
+const quickReactions = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 const mockFiles = ['Contrato.pdf', 'PlanProyecto.docx', 'Resumen.xlsx'];
 const mockPhotos = ['IMG_1024.JPG', 'IMG_1025.JPG', 'IMG_1026.JPG'];
 
@@ -48,14 +53,15 @@ export default function ConversationScreen() {
   const [showAttach, setShowAttach] = useState(false);
   const [pickerType, setPickerType] = useState<'none' | 'doc' | 'gallery' | 'camera'>('none');
   const [isRecording, setIsRecording] = useState(false);
+  const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
+  const [reactionByMessage, setReactionByMessage] = useState<Record<string, string>>({});
+  const [cameraPermission, setCameraPermission] = useState<'unknown' | 'granted' | 'denied'>('unknown');
+  const [micPermission, setMicPermission] = useState<'unknown' | 'granted' | 'denied'>('unknown');
   const recordingPulse = useRef(new Animated.Value(1)).current;
   const inputRef = useRef<TextInput>(null);
 
   const chatName = chatSummaries.find((chat) => chat.id === chatId)?.name ?? 'Chat';
-  const pickerItems = useMemo(() => {
-    if (pickerType === 'doc') return mockFiles;
-    return mockPhotos;
-  }, [pickerType]);
+  const pickerItems = useMemo(() => (pickerType === 'doc' ? mockFiles : mockPhotos), [pickerType]);
 
   const pushAttachment = (kind: 'doc' | 'gallery' | 'camera', name: string) => {
     const prefix = kind === 'doc' ? '📄 Documento' : kind === 'gallery' ? '🖼️ Imagen' : '📷 Foto';
@@ -64,15 +70,98 @@ export default function ConversationScreen() {
     setShowAttach(false);
   };
 
-  const handleAction = (id: (typeof attachActions)[number]['id']) => {
+  const openMessageActions = (message: Message) => {
+    setSelectedMessageId(message.id);
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: [...messageActions, 'Cancelar'],
+          cancelButtonIndex: messageActions.length,
+          destructiveButtonIndex: 4,
+        },
+        (index) => {
+          if (index === messageActions.length) return;
+          const action = messageActions[index];
+          if (action === 'Copiar') {
+            sendTemplateMessage('📋 Mensaje copiado');
+          }
+          if (action === 'Eliminar') {
+            sendTemplateMessage('🗑️ Mensaje eliminado');
+          }
+        },
+      );
+      return;
+    }
+    Alert.alert('Mensaje', 'Selecciona una acción', [
+      ...messageActions.map((action) => ({ text: action })),
+      { text: 'Cancelar', style: 'cancel' },
+    ]);
+  };
+
+  const openSettings = () => Linking.openSettings();
+
+  const requestCameraPermission = async () => {
+    if (cameraPermission === 'denied') {
+      Alert.alert('Permiso de cámara', 'Activa la cámara en Configuración para continuar.', [
+        { text: 'Ahora no', style: 'cancel' },
+        { text: 'Abrir Configuración', onPress: openSettings },
+      ]);
+      return false;
+    }
+    setCameraPermission('granted');
+    return true;
+  };
+
+  const requestMicPermission = async () => {
+    if (micPermission === 'denied') {
+      Alert.alert('Permiso de micrófono', 'Activa el micrófono en Configuración para continuar.', [
+        { text: 'Ahora no', style: 'cancel' },
+        { text: 'Abrir Configuración', onPress: openSettings },
+      ]);
+      return false;
+    }
+    setMicPermission('granted');
+    return true;
+  };
+
+  const requestLocationPermission = async () => {
+    const granted = await new Promise<boolean>((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        () => resolve(true),
+        () => resolve(false),
+        { enableHighAccuracy: true, timeout: 6000, maximumAge: 1000 },
+      );
+    });
+
+    if (!granted) {
+      Alert.alert('Permiso de ubicación', 'Activa la ubicación en Configuración para compartirla.', [
+        { text: 'Ahora no', style: 'cancel' },
+        { text: 'Abrir Configuración', onPress: openSettings },
+      ]);
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleAction = async (id: (typeof attachActions)[number]['id']) => {
     if (id === 'doc') setPickerType('doc');
     if (id === 'gallery') setPickerType('gallery');
-    if (id === 'camera') setPickerType('camera');
+    if (id === 'camera') {
+      const granted = await requestCameraPermission();
+      if (granted) setPickerType('camera');
+    }
     if (id === 'location') {
-      sendTemplateMessage(`📍 Ubicación compartida · ${formatTime()}`);
+      const granted = await requestLocationPermission();
+      if (granted) sendTemplateMessage(`📍 Ubicación compartida · ${formatTime()}`);
       setShowAttach(false);
     }
     if (id === 'audio') {
+      const granted = await requestMicPermission();
+      if (!granted) {
+        setShowAttach(false);
+        return;
+      }
       if (isRecording) {
         setIsRecording(false);
         recordingPulse.stopAnimation();
@@ -94,8 +183,18 @@ export default function ConversationScreen() {
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.safeArea}>
         <View style={styles.header}>
-          <Text style={styles.headerName}>{chatName}</Text>
-          <Text style={styles.headerSubtitle}>En línea</Text>
+          <View>
+            <Text style={styles.headerName}>{chatName}</Text>
+            <Text style={styles.headerSubtitle}>En línea</Text>
+          </View>
+          <View style={styles.headerActions}>
+            <Pressable style={styles.headerActionButton}>
+              <Ionicons name="call-outline" size={18} color="#1F7AE0" />
+            </Pressable>
+            <Pressable style={styles.headerActionButton}>
+              <Ionicons name="videocam-outline" size={19} color="#1F7AE0" />
+            </Pressable>
+          </View>
         </View>
 
         <FlatList
@@ -105,14 +204,34 @@ export default function ConversationScreen() {
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => {
             const icon = statusIcon(item.status);
+            const reaction = reactionByMessage[item.id];
+            const selected = selectedMessageId === item.id;
             return (
-              <View style={[styles.bubble, item.sender === 'me' ? styles.me : styles.contact]}>
-                <Text style={[styles.bubbleText, item.sender === 'me' && styles.meText]}>{item.text}</Text>
-                <View style={styles.rowMeta}>
-                  <Text style={styles.time}>{item.time}</Text>
-                  {item.sender === 'me' ? <Ionicons name={icon.name} size={14} color={icon.color} /> : null}
+              <Pressable onLongPress={() => openMessageActions(item)} delayLongPress={180}>
+                {selected ? (
+                  <View style={[styles.reactionBar, item.sender === 'me' ? styles.reactionRight : styles.reactionLeft]}>
+                    {quickReactions.map((emoji) => (
+                      <Pressable
+                        key={`${item.id}-${emoji}`}
+                        style={styles.reactionButton}
+                        onPress={() => {
+                          setReactionByMessage((prev) => ({ ...prev, [item.id]: emoji }));
+                          setSelectedMessageId(null);
+                        }}>
+                        <Text style={styles.reactionEmoji}>{emoji}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                ) : null}
+                <View style={[styles.bubble, item.sender === 'me' ? styles.me : styles.contact, selected && styles.selectedBubble]}>
+                  <Text style={[styles.bubbleText, item.sender === 'me' && styles.meText]}>{item.text}</Text>
+                  <View style={styles.rowMeta}>
+                    {reaction ? <Text style={styles.reactionTag}>{reaction}</Text> : null}
+                    <Text style={styles.time}>{item.time}</Text>
+                    {item.sender === 'me' ? <Ionicons name={icon.name} size={14} color={icon.color} /> : null}
+                  </View>
                 </View>
-              </View>
+              </Pressable>
             );
           }}
         />
@@ -171,9 +290,9 @@ export default function ConversationScreen() {
               {pickerItems.map((item) => {
                 const kind = pickerType === 'none' ? 'gallery' : pickerType;
                 return (
-                <Pressable key={item} style={styles.modalOption} onPress={() => pushAttachment(kind, item)}>
-                  <Text style={styles.modalOptionText}>{item}</Text>
-                </Pressable>
+                  <Pressable key={item} style={styles.modalOption} onPress={() => pushAttachment(kind, item)}>
+                    <Text style={styles.modalOptionText}>{item}</Text>
+                  </Pressable>
                 );
               })}
               <Pressable style={styles.modalClose} onPress={() => setPickerType('none')}>
@@ -195,18 +314,49 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  headerActions: { flexDirection: 'row', gap: 8 },
+  headerActionButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#ECF4FF',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerName: { color: '#1A2B44', fontWeight: '700', fontSize: 18 },
   headerSubtitle: { color: '#6A7D95', marginTop: 2, fontSize: 13 },
   list: { flex: 1, backgroundColor: '#F8FBFF' },
-  listContent: { padding: 12, gap: 10, paddingBottom: 30 },
+  listContent: { padding: 12, gap: 12, paddingBottom: 30 },
   bubble: { maxWidth: '82%', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 8 },
   me: { alignSelf: 'flex-end', backgroundColor: '#DDF0FF' },
   contact: { alignSelf: 'flex-start', backgroundColor: '#FFF', borderWidth: 1, borderColor: '#E3EAF4' },
+  selectedBubble: { shadowColor: '#1F7AE0', shadowOpacity: 0.2, shadowRadius: 8, shadowOffset: { width: 0, height: 3 } },
   bubbleText: { color: '#273A52', fontSize: 15 },
   meText: { color: '#1B3552' },
   rowMeta: { flexDirection: 'row', alignSelf: 'flex-end', alignItems: 'center', gap: 4, marginTop: 4 },
+  reactionTag: { fontSize: 12 },
   time: { color: '#7388A4', fontSize: 11 },
+  reactionBar: {
+    position: 'absolute',
+    top: -32,
+    zIndex: 5,
+    backgroundColor: '#FFF',
+    flexDirection: 'row',
+    borderRadius: 18,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: '#E4EAF3',
+  },
+  reactionLeft: { left: 0 },
+  reactionRight: { right: 0 },
+  reactionButton: { paddingHorizontal: 3 },
+  reactionEmoji: { fontSize: 18 },
   composer: {
     flexDirection: 'row',
     alignItems: 'flex-end',

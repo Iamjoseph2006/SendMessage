@@ -18,6 +18,9 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Perfil</Text>
+      </View>
       <View style={styles.container}>
         <View style={styles.headerCard}>
           <View style={styles.profilePhoto}>
@@ -42,6 +45,8 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#FFF' },
+  header: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 },
+  headerTitle: { fontSize: 34, fontWeight: '800', color: '#1A2B44' },
   container: { padding: 16, gap: 12 },
   headerCard: {
     borderRadius: 18,

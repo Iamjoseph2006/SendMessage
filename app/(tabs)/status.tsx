@@ -32,6 +32,9 @@ export default function StatusScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Estados</Text>
+      </View>
       <ScrollView contentContainerStyle={styles.container}>
         <Pressable style={styles.addStatus} onPress={() => setShowCreator(true)}>
           <View style={styles.avatar}>
@@ -96,6 +99,8 @@ export default function StatusScreen() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#FFF' },
+  header: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 },
+  headerTitle: { fontSize: 34, fontWeight: '800', color: '#1A2B44' },
   container: { paddingHorizontal: 16, paddingTop: 10, gap: 14, paddingBottom: 30 },
   addStatus: {
     flexDirection: 'row',

@@ -13,6 +13,9 @@ export default function CallsScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Llamadas</Text>
+      </View>
       <View style={styles.container}>
         {calls.map((call) => (
           <View style={styles.row} key={call.id}>
@@ -42,6 +45,8 @@ export default function CallsScreen() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#FFF' },
+  header: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 },
+  headerTitle: { fontSize: 34, fontWeight: '800', color: '#1A2B44' },
   container: { paddingHorizontal: 16, paddingTop: 10, gap: 12 },
   row: {
     flexDirection: 'row',
