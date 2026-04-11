@@ -1,23 +1,22 @@
 # SendMessage
 
-Aplicación móvil con Expo Router enfocada en un **MVP de mensajería local**.
+Aplicación móvil con Expo Router enfocada en una experiencia estilo mensajería moderna, con interfaz completamente funcional a nivel visual e interacción.
 
 ## Estado actual del proyecto
 
-- Interfaz renovada con base visual **blanca** y acentos azules.
-- Flujo de chat funcional en memoria local (sin backend y sin base de datos).
-- Pantalla de exploración con historias y comunidades de ejemplo.
-- Login y registro **fuera de alcance por ahora**.
+- Navegación inferior con cuatro secciones: **Chats**, **Llamadas**, **Estados** y **Perfil**.
+- Lista de conversaciones con navegación a detalle de chat.
+- Pantalla de conversación con envío de mensajes, acciones rápidas (adjuntos, cámara, audio, ubicación, emojis) y estados de mensaje simulados.
+- Pantallas de llamadas, estados y perfil con datos mock e interacción visual.
+- Arquitectura preparada para escalar con **Clean Architecture + MVVM** usando repositorios y casos de uso.
 
 ## Estructura principal
 
-- `app/(tabs)/index.tsx`: Chat principal local con respuestas automáticas.
-- `app/(tabs)/explore.tsx`: Vista de historias y canales/comunidades.
-- `app/(tabs)/_layout.tsx`: Navegación por pestañas con estilo blanco.
-- `app/_layout.tsx`: Layout raíz de navegación.
-
-## Siguiente paso sugerido (sin auth)
-
-1. Definir capa de servicios para API/Realtime (sin acoplarla todavía a UI).
-2. Normalizar modelos de datos (`chat`, `message`, `community`).
-3. Agregar estado global (por ejemplo Zustand/Redux Toolkit) para preparar integración de backend.
+- `app/(tabs)/index.tsx`: lista de chats.
+- `app/chat/[chatId].tsx`: conversación completa con interacciones simuladas.
+- `app/(tabs)/calls.tsx`: historial de llamadas.
+- `app/(tabs)/status.tsx`: estados tipo historias.
+- `app/(tabs)/profile.tsx`: perfil y ajustes visuales.
+- `src/domain`: entidades, contratos y casos de uso.
+- `src/data`: repositorio mock y datos simulados.
+- `src/presentation/viewmodels`: hooks MVVM para cada pantalla.
