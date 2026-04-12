@@ -85,8 +85,12 @@ export class FirebaseMessagingRepository implements MessagingRepository {
 
   listenMessages(chatId: string, onUpdate: (messages: Message[]) => void) {
     const interval = setInterval(async () => {
-      const messages = await this.getMessages(chatId);
-      onUpdate(messages);
+      try {
+        const messages = await this.getMessages(chatId);
+        onUpdate(messages);
+      } catch {
+        // Silenciamos errores transitorios de red para mantener el polling activo.
+      }
     }, 1600);
 
     return () => clearInterval(interval);

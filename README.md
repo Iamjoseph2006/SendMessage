@@ -7,23 +7,50 @@ Aplicación móvil de mensajería con arquitectura **Clean Architecture + MVVM**
 - Expo Router
 - Capa de dominio/datos/presentación separada
 
-## Backend en tiempo real (Firebase)
-El proyecto ahora está preparado para trabajar con Firebase mediante un repositorio dedicado.
+## Backend en tiempo real (Firebase SDK)
+Se agregó una implementación escalable con separación por features:
+
+```text
+src/
+  config/
+    firebase.ts
+  features/
+    auth/
+      services/
+      hooks/
+    chat/
+      services/
+      hooks/
+```
 
 ### Variables de entorno
-Configura estas variables para activar Firebase:
+Configura estas variables para activar Firebase SDK:
 
 - `EXPO_PUBLIC_FIREBASE_API_KEY`
+- `EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN`
 - `EXPO_PUBLIC_FIREBASE_PROJECT_ID`
 - `EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET`
+- `EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
+- `EXPO_PUBLIC_FIREBASE_APP_ID`
 
-Cuando estas variables existen, `messagingUseCases` usa `FirebaseMessagingRepository`; de lo contrario usa `MockMessagingRepository`.
+### Servicios disponibles
+- Auth:
+  - `registerUser(email, password)`
+  - `loginUser(email, password)`
+  - `logoutUser()`
+  - `getCurrentUser()`
+- Chats:
+  - `createChat(userId1, userId2)`
+  - `getUserChats(userId)`
+  - `listenUserChats(userId, callback)`
+- Mensajes:
+  - `sendMessage(chatId, text, senderId)`
+  - `listenMessages(chatId, callback)` (suscripción tipo `onSnapshot` con `unsubscribe`)
 
-## Funcionalidades backend implementadas en la capa Data
-- Auth (email/password) vía Identity Toolkit REST.
-- Chats y mensajes vía Firestore REST.
-- Listener en tiempo real aproximado por polling (`listenMessages`) para refresco continuo de mensajes.
-- Base preparada para `sendImageMessage` y extensiones de audio/documento/ubicación.
+### Hooks listos para UI
+- `useAuth()`
+- `useUserChats(userId)`
+- `useChatMessages(chatId)`
 
 ## Ejecutar
 ```bash

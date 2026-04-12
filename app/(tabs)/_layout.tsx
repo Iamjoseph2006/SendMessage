@@ -1,15 +1,19 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Tabs } from 'expo-router';
+import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
 
 export default function TabLayout() {
+  const { isDark } = useAppTheme();
+  const palette = isDark ? darkPalette : lightPalette;
+
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: '#1F7AE0',
-        tabBarInactiveTintColor: '#8A98AB',
+        tabBarActiveTintColor: palette.accent,
+        tabBarInactiveTintColor: palette.textSecondary,
         tabBarStyle: {
-          backgroundColor: '#FFFFFF',
-          borderTopColor: '#E6EBF2',
+          backgroundColor: palette.surface,
+          borderTopColor: palette.border,
           height: 70,
           paddingBottom: 8,
           paddingTop: 8,
