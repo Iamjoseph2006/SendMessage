@@ -1,22 +1,34 @@
 # SendMessage
 
-Aplicación móvil con Expo Router enfocada en una experiencia estilo mensajería moderna, con interfaz completamente funcional a nivel visual e interacción.
+Aplicación móvil de mensajería con arquitectura **Clean Architecture + MVVM**.
 
-## Estado actual del proyecto
+## Stack actual
+- Expo + React Native
+- Expo Router
+- Capa de dominio/datos/presentación separada
 
-- Navegación inferior con cuatro secciones: **Chats**, **Llamadas**, **Estados** y **Perfil**.
-- Lista de conversaciones con navegación a detalle de chat.
-- Pantalla de conversación con envío de mensajes, acciones rápidas (adjuntos, cámara, audio, ubicación, emojis) y estados de mensaje simulados.
-- Pantallas de llamadas, estados y perfil con datos mock e interacción visual.
-- Arquitectura preparada para escalar con **Clean Architecture + MVVM** usando repositorios y casos de uso.
+## Backend en tiempo real (Firebase)
+El proyecto ahora está preparado para trabajar con Firebase mediante un repositorio dedicado.
 
-## Estructura principal
+### Variables de entorno
+Configura estas variables para activar Firebase:
 
-- `app/(tabs)/index.tsx`: lista de chats.
-- `app/chat/[chatId].tsx`: conversación completa con interacciones simuladas.
-- `app/(tabs)/calls.tsx`: historial de llamadas.
-- `app/(tabs)/status.tsx`: estados tipo historias.
-- `app/(tabs)/profile.tsx`: perfil y ajustes visuales.
-- `src/domain`: entidades, contratos y casos de uso.
-- `src/data`: repositorio mock y datos simulados.
-- `src/presentation/viewmodels`: hooks MVVM para cada pantalla.
+- `EXPO_PUBLIC_FIREBASE_API_KEY`
+- `EXPO_PUBLIC_FIREBASE_PROJECT_ID`
+- `EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET`
+
+Cuando estas variables existen, `messagingUseCases` usa `FirebaseMessagingRepository`; de lo contrario usa `MockMessagingRepository`.
+
+## Funcionalidades backend implementadas en la capa Data
+- Auth (email/password) vía Identity Toolkit REST.
+- Chats y mensajes vía Firestore REST.
+- Listener en tiempo real aproximado por polling (`listenMessages`) para refresco continuo de mensajes.
+- Base preparada para `sendImageMessage` y extensiones de audio/documento/ubicación.
+
+## Ejecutar
+```bash
+npm install
+npm run lint
+npx tsc --noEmit
+npm run start
+```

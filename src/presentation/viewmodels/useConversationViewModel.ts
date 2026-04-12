@@ -1,9 +1,10 @@
 import { Message, MessageStatus } from '@/src/domain/entities';
-import { getMessagesUseCase, sendMessageUseCase } from '@/src/domain/usecases/messagingUseCases';
+import { getMessagesUseCase, listenMessagesUseCase, sendMessageUseCase } from '@/src/domain/usecases/messagingUseCases';
 import { useEffect, useMemo, useState } from 'react';
 
 const nextStatus: Record<MessageStatus, MessageStatus> = {
-  sent: 'received',
+  sent: 'delivered',
+  delivered: 'read',
   received: 'read',
   read: 'read',
 };
@@ -21,6 +22,14 @@ export const useConversationViewModel = (chatId: string) => {
 
   useEffect(() => {
     getMessagesUseCase(chatId).then(setMessages);
+
+    const unsubscribe = listenMessagesUseCase(chatId, (nextMessages: Message[]) => {
+      setMessages(nextMessages);
+    });
+
+    return () => {
+      unsubscribe?.();
+    };
   }, [chatId]);
 
   useEffect(() => {
