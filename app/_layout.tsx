@@ -12,6 +12,25 @@ export const unstable_settings = {
 };
 
 export default function RootLayout() {
+  const [showBootSplash, setShowBootSplash] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setShowBootSplash(false), 1700);
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (showBootSplash) {
+    return (
+      <SafeAreaView style={styles.splash}>
+        <View style={styles.splashContent}>
+          <Image source={require('@/assets/images/logo.png')} style={styles.logo} resizeMode="contain" />
+          <Text style={styles.appName}>SendMessage</Text>
+          <Text style={styles.appHint}>simple · rápido · seguro</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <AppThemeProvider>
       <RootNavigator />

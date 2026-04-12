@@ -56,5 +56,5 @@ export const statusItems: StatusItem[] = [
 export const profileData: Profile = {
   name: 'Tu Nombre',
   about: 'Disponible para conversar',
-  phone: '+1 555 0134',
+  phone: '+593 96 873 8976',
 };
