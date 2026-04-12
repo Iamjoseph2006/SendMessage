@@ -43,7 +43,7 @@ export const chatMessagesByChatId: Record<string, Message[]> = {
 
 export const callLogs: CallLog[] = [
   { id: 'cl1', name: 'María López', time: 'Hoy, 11:05', type: 'incoming' },
-  { id: 'cl2', name: 'Estiven', time: 'Hoy, 09:32', type: 'missed' },
+  { id: 'cl2', name: 'Carlos', time: 'Hoy, 09:32', type: 'missed' },
   { id: 'cl3', name: 'Equipo Diseño', time: 'Ayer, 18:40', type: 'outgoing' },
 ];
 
