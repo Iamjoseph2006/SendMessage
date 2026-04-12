@@ -1,4 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState } from 'react';
 import { Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useStatusesViewModel } from '@/src/presentation/viewmodels/useStatusesViewModel';
@@ -30,9 +31,11 @@ export default function StatusScreen() {
     setShowCreator(false);
   };
 
+  const insets = useSafeAreaInsets();
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 4 }]}>
         <Text style={styles.headerTitle}>Estados</Text>
       </View>
       <ScrollView contentContainerStyle={styles.container}>

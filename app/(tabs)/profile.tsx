@@ -1,4 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import { useProfileViewModel } from '@/src/presentation/viewmodels/useProfileViewModel';
@@ -13,12 +14,13 @@ const options = [
 export default function ProfileScreen() {
   const { profile } = useProfileViewModel();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   if (!profile) return null;
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 4 }]}>
         <Text style={styles.headerTitle}>Perfil</Text>
       </View>
       <View style={styles.container}>

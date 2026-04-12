@@ -1,4 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { FlatList, Modal, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
@@ -10,9 +11,11 @@ export default function ChatsScreen() {
   const router = useRouter();
   const [previewChat, setPreviewChat] = useState<ChatSummary | null>(null);
 
+  const insets = useSafeAreaInsets();
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 4 }]}>
         <Text style={styles.title}>Chats</Text>
       </View>
       <FlatList

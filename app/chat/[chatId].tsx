@@ -1,9 +1,9 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useLocalSearchParams } from 'expo-router';
 import { useMemo, useRef, useState } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ActionSheetIOS,
-  Alert,
   Animated,
   FlatList,
   KeyboardAvoidingView,
@@ -55,10 +55,9 @@ export default function ConversationScreen() {
   const [isRecording, setIsRecording] = useState(false);
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const [reactionByMessage, setReactionByMessage] = useState<Record<string, string>>({});
-  const [cameraPermission, setCameraPermission] = useState<'unknown' | 'granted' | 'denied'>('unknown');
-  const [micPermission, setMicPermission] = useState<'unknown' | 'granted' | 'denied'>('unknown');
   const recordingPulse = useRef(new Animated.Value(1)).current;
   const inputRef = useRef<TextInput>(null);
+  const insets = useSafeAreaInsets();
 
   const chatName = chatSummaries.find((chat) => chat.id === chatId)?.name ?? 'Chat';
   const pickerItems = useMemo(() => (pickerType === 'doc' ? mockFiles : mockPhotos), [pickerType]);
@@ -92,56 +91,53 @@ export default function ConversationScreen() {
       );
       return;
     }
-    Alert.alert('Mensaje', 'Selecciona una acción', [
-      ...messageActions.map((action) => ({ text: action })),
-      { text: 'Cancelar', style: 'cancel' },
-    ]);
+    sendTemplateMessage('💬 Acción de mensaje seleccionada');
   };
 
   const openSettings = () => Linking.openSettings();
 
   const requestCameraPermission = async () => {
-    if (cameraPermission === 'denied') {
-      Alert.alert('Permiso de cámara', 'Activa la cámara en Configuración para continuar.', [
-        { text: 'Ahora no', style: 'cancel' },
-        { text: 'Abrir Configuración', onPress: openSettings },
-      ]);
-      return false;
-    }
-    setCameraPermission('granted');
+    const canOpenCamera = await Linking.canOpenURL('camera://');
+    if (!canOpenCamera) return false;
+
+    await Linking.openURL('camera://');
     return true;
   };
 
   const requestMicPermission = async () => {
-    if (micPermission === 'denied') {
-      Alert.alert('Permiso de micrófono', 'Activa el micrófono en Configuración para continuar.', [
-        { text: 'Ahora no', style: 'cancel' },
-        { text: 'Abrir Configuración', onPress: openSettings },
-      ]);
+    const mediaDevices = (globalThis.navigator as Navigator | undefined)?.mediaDevices;
+    if (!mediaDevices?.getUserMedia) return true;
+
+    try {
+      const stream = await mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach((track) => track.stop());
+      return true;
+    } catch {
       return false;
     }
-    setMicPermission('granted');
-    return true;
   };
 
   const requestLocationPermission = async () => {
-    const granted = await new Promise<boolean>((resolve) => {
-      navigator.geolocation.getCurrentPosition(
+    const geolocation = globalThis.navigator?.geolocation as
+      | (Geolocation & { requestAuthorization?: (success?: () => void, error?: () => void) => void })
+      | undefined;
+
+    if (!geolocation) return false;
+
+    if (typeof geolocation.requestAuthorization === 'function') {
+      geolocation.requestAuthorization();
+    }
+
+    return new Promise<boolean>((resolve) => {
+      geolocation.getCurrentPosition(
         () => resolve(true),
-        () => resolve(false),
+        () => {
+          openSettings();
+          resolve(false);
+        },
         { enableHighAccuracy: true, timeout: 6000, maximumAge: 1000 },
       );
     });
-
-    if (!granted) {
-      Alert.alert('Permiso de ubicación', 'Activa la ubicación en Configuración para compartirla.', [
-        { text: 'Ahora no', style: 'cancel' },
-        { text: 'Abrir Configuración', onPress: openSettings },
-      ]);
-      return false;
-    }
-
-    return true;
   };
 
   const handleAction = async (id: (typeof attachActions)[number]['id']) => {
@@ -149,7 +145,8 @@ export default function ConversationScreen() {
     if (id === 'gallery') setPickerType('gallery');
     if (id === 'camera') {
       const granted = await requestCameraPermission();
-      if (granted) setPickerType('camera');
+      if (granted) sendTemplateMessage('📷 Foto tomada y enviada');
+      setShowAttach(false);
     }
     if (id === 'location') {
       const granted = await requestLocationPermission();
@@ -182,7 +179,7 @@ export default function ConversationScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.safeArea}>
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: insets.top + 4 }]}>
           <View>
             <Text style={styles.headerName}>{chatName}</Text>
             <Text style={styles.headerSubtitle}>En línea</Text>
