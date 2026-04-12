@@ -1,4 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import { useCallsViewModel } from '@/src/presentation/viewmodels/useCallsViewModel';
 
@@ -11,8 +12,13 @@ const callTypeLabel = {
 export default function CallsScreen() {
   const { calls } = useCallsViewModel();
 
+  const insets = useSafeAreaInsets();
+
   return (
     <SafeAreaView style={styles.safeArea}>
+      <View style={[styles.header, { paddingTop: insets.top + 4 }]}>
+        <Text style={styles.headerTitle}>Llamadas</Text>
+      </View>
       <View style={styles.container}>
         {calls.map((call) => (
           <View style={styles.row} key={call.id}>
@@ -42,6 +48,8 @@ export default function CallsScreen() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#FFF' },
+  header: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 },
+  headerTitle: { fontSize: 34, fontWeight: '800', color: '#1A2B44' },
   container: { paddingHorizontal: 16, paddingTop: 10, gap: 12 },
   row: {
     flexDirection: 'row',

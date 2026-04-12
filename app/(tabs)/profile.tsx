@@ -1,21 +1,28 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import { useProfileViewModel } from '@/src/presentation/viewmodels/useProfileViewModel';
 
 const options = [
-  { id: 'o1', icon: 'notifications-outline', label: 'Notificaciones' },
-  { id: 'o2', icon: 'lock-closed-outline', label: 'Privacidad' },
-  { id: 'o3', icon: 'color-palette-outline', label: 'Apariencia' },
-  { id: 'o4', icon: 'help-circle-outline', label: 'Ayuda' },
+  { id: 'notifications', icon: 'notifications-outline', label: 'Notificaciones' },
+  { id: 'privacy', icon: 'lock-closed-outline', label: 'Privacidad' },
+  { id: 'appearance', icon: 'color-palette-outline', label: 'Apariencia' },
+  { id: 'help', icon: 'help-circle-outline', label: 'Ayuda' },
 ] as const;
 
 export default function ProfileScreen() {
   const { profile } = useProfileViewModel();
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   if (!profile) return null;
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <View style={[styles.header, { paddingTop: insets.top + 4 }]}>
+        <Text style={styles.headerTitle}>Perfil</Text>
+      </View>
       <View style={styles.container}>
         <View style={styles.headerCard}>
           <View style={styles.profilePhoto}>
@@ -27,7 +34,7 @@ export default function ProfileScreen() {
         </View>
 
         {options.map((option) => (
-          <Pressable key={option.id} style={styles.optionRow}>
+          <Pressable key={option.id} style={styles.optionRow} onPress={() => router.push(`/profile/${option.id}`)}>
             <Ionicons name={option.icon} size={20} color="#1F7AE0" />
             <Text style={styles.optionText}>{option.label}</Text>
             <Ionicons name="chevron-forward" size={18} color="#A1AFC1" />
@@ -40,6 +47,8 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#FFF' },
+  header: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 },
+  headerTitle: { fontSize: 34, fontWeight: '800', color: '#1A2B44' },
   container: { padding: 16, gap: 12 },
   headerCard: {
     borderRadius: 18,
