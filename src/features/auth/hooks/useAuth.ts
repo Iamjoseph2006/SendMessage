@@ -46,7 +46,7 @@ export const useAuth = (): AuthState => {
     loading,
     error,
     register: async (name: string, email: string, password: string) =>
-      handleAction(() => registerUser(name, email, password)),
+      handleAction(() => registerUser(email, password, name)),
     login: async (email: string, password: string) => handleAction(() => loginUser(email, password)),
     logout: async () => handleAction(logoutUser),
   };

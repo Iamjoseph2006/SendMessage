@@ -1,64 +1,120 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useCallsViewModel } from '@/src/presentation/viewmodels/useCallsViewModel';
+import { useAuth } from '@/src/features/auth/hooks/useAuth';
+import { createCall, getCallHistory, CallLog, CallType } from '@/src/features/calls/services/callService';
+import { getUsers, UserProfile } from '@/src/features/users/services/userService';
 import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
 
-const callTypeLabel = {
-  incoming: 'Entrante',
-  outgoing: 'Saliente',
-  missed: 'Perdida',
-} as const;
-
 export default function CallsScreen() {
-  const { calls } = useCallsViewModel();
+  const { user } = useAuth();
   const { isDark } = useAppTheme();
   const palette = isDark ? darkPalette : lightPalette;
+
+  const [calls, setCalls] = useState<CallLog[]>([]);
+  const [users, setUsers] = useState<UserProfile[]>([]);
   const [activeCall, setActiveCall] = useState<string | null>(null);
-  const [callMode, setCallMode] = useState<'audio' | 'video'>('audio');
+  const [callMode, setCallMode] = useState<CallType>('voice');
+  const [error, setError] = useState<string | null>(null);
 
   const insets = useSafeAreaInsets();
 
-  const triggerCall = (name: string, mode: 'audio' | 'video') => {
-    setCallMode(mode);
-    setActiveCall(name);
+  const loadData = useCallback(async () => {
+    if (!user?.uid) {
+      return;
+    }
+
+    try {
+      const [history, directory] = await Promise.all([getCallHistory(user.uid), getUsers(user.uid)]);
+      setCalls(history);
+      setUsers(directory.slice(0, 6));
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'No se pudo cargar el historial de llamadas.');
+    }
+  }, [user?.uid]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const usersById = useMemo(
+    () =>
+      users.reduce<Record<string, string>>((acc, item) => {
+        acc[item.uid] = item.name;
+        return acc;
+      }, {}),
+    [users],
+  );
+
+  const triggerCall = async (receiverId: string, mode: CallType) => {
+    if (!user?.uid) {
+      return;
+    }
+
+    try {
+      setError(null);
+      setCallMode(mode);
+      const receiverName = usersById[receiverId] ?? 'Usuario';
+      setActiveCall(receiverName);
+      await createCall(user.uid, receiverId, mode);
+      await loadData();
+    } catch (callError) {
+      setError(callError instanceof Error ? callError.message : 'No se pudo registrar la llamada.');
+    }
   };
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background }]}>
-      <View style={[styles.header, { paddingTop: insets.top + 4 }]}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background }]}> 
+      <View style={[styles.header, { paddingTop: insets.top + 4 }]}> 
         <Text style={[styles.headerTitle, { color: palette.textPrimary }]}>Llamadas</Text>
       </View>
+
       <View style={styles.container}>
-        {calls.map((call) => (
-          <View style={[styles.row, { backgroundColor: palette.surface, borderColor: palette.border }]} key={call.id}>
+        {users.map((directoryUser) => (
+          <View style={[styles.row, { backgroundColor: palette.surface, borderColor: palette.border }]} key={directoryUser.uid}>
             <View style={[styles.avatar, { backgroundColor: isDark ? '#20314A' : '#E8F1FF' }]}>
-              <Text style={[styles.avatarText, { color: palette.textPrimary }]}>{call.name.charAt(0)}</Text>
+              <Text style={[styles.avatarText, { color: palette.textPrimary }]}>{directoryUser.name.charAt(0)}</Text>
             </View>
             <View style={styles.dataWrap}>
-              <Text style={[styles.name, { color: palette.textPrimary }]}>{call.name}</Text>
-              <Text style={[styles.meta, { color: palette.textSecondary }]}>
-                {callTypeLabel[call.type]} · {call.time}
-              </Text>
+              <Text style={[styles.name, { color: palette.textPrimary }]}>{directoryUser.name}</Text>
+              <Text style={[styles.meta, { color: palette.textSecondary }]}>{directoryUser.email}</Text>
             </View>
             <View style={styles.actions}>
-              <Pressable style={[styles.iconAction, { backgroundColor: isDark ? '#21314A' : '#ECF4FF' }]} onPress={() => triggerCall(call.name, 'audio')}>
+              <Pressable
+                style={[styles.iconAction, { backgroundColor: isDark ? '#21314A' : '#ECF4FF' }]}
+                onPress={() => triggerCall(directoryUser.uid, 'voice')}>
                 <Ionicons name="call" size={18} color={palette.accent} />
               </Pressable>
-              <Pressable style={[styles.iconAction, { backgroundColor: isDark ? '#21314A' : '#ECF4FF' }]} onPress={() => triggerCall(call.name, 'video')}>
+              <Pressable
+                style={[styles.iconAction, { backgroundColor: isDark ? '#21314A' : '#ECF4FF' }]}
+                onPress={() => triggerCall(directoryUser.uid, 'video')}>
                 <Ionicons name="videocam" size={20} color={palette.accent} />
               </Pressable>
             </View>
           </View>
         ))}
+
+        <Text style={[styles.historyTitle, { color: palette.textPrimary }]}>Historial</Text>
+        {calls.map((call) => {
+          const isCaller = call.callerId === user?.uid;
+          const counterpartId = isCaller ? call.receiverId : call.callerId;
+
+          return (
+            <Text key={call.id} style={[styles.meta, { color: palette.textSecondary }]}> 
+              {isCaller ? 'Saliente' : 'Entrante'} · {usersById[counterpartId] ?? counterpartId} · {call.type} · {call.status}
+            </Text>
+          );
+        })}
+
+        {error ? <Text style={styles.error}>{error}</Text> : null}
       </View>
 
       {activeCall ? (
         <View style={styles.callBanner}>
-          <Ionicons name={callMode === 'audio' ? 'call' : 'videocam'} size={15} color="#FFFFFF" />
+          <Ionicons name={callMode === 'voice' ? 'call' : 'videocam'} size={15} color="#FFFFFF" />
           <Text style={styles.callBannerText}>
-            {callMode === 'audio' ? 'Llamando' : 'Videollamando'} a {activeCall}...
+            {callMode === 'voice' ? 'Llamando' : 'Videollamando'} a {activeCall}...
           </Text>
           <Pressable onPress={() => setActiveCall(null)} hitSlop={6}>
             <Ionicons name="close" size={17} color="#FFFFFF" />
@@ -98,6 +154,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  historyTitle: { marginTop: 6, fontWeight: '700', fontSize: 16 },
   callBanner: {
     position: 'absolute',
     left: 16,
@@ -112,4 +169,5 @@ const styles = StyleSheet.create({
     gap: 7,
   },
   callBannerText: { flex: 1, color: '#FFFFFF', fontWeight: '600' },
+  error: { color: '#D93025' },
 });

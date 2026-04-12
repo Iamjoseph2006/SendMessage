@@ -1,38 +1,66 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useStatusesViewModel } from '@/src/presentation/viewmodels/useStatusesViewModel';
+import { useAuth } from '@/src/features/auth/hooks/useAuth';
+import { getStatuses, createStatus, StatusItem } from '@/src/features/status/services/statusService';
+import { getUsersByUids } from '@/src/features/users/services/userService';
 import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
 
-type LocalStatus = {
-  id: string;
-  name: string;
-  time: string;
-  viewed: boolean;
-  caption?: string;
-};
-
 export default function StatusScreen() {
-  const { statuses } = useStatusesViewModel();
+  const { user } = useAuth();
   const { isDark } = useAppTheme();
   const palette = isDark ? darkPalette : lightPalette;
   const [showCreator, setShowCreator] = useState(false);
-  const [caption, setCaption] = useState('');
-  const [myStatuses, setMyStatuses] = useState<LocalStatus[]>([]);
+  const [content, setContent] = useState('');
+  const [statuses, setStatuses] = useState<StatusItem[]>([]);
+  const [usersById, setUsersById] = useState<Record<string, string>>({});
+  const [error, setError] = useState<string | null>(null);
 
-  const createStatus = (type: 'gallery' | 'camera') => {
-    const nextStatus: LocalStatus = {
-      id: `my-${Date.now()}`,
-      name: 'Tu estado',
-      time: 'Ahora',
-      viewed: false,
-      caption: `${type === 'gallery' ? '🖼️ Estado desde galería' : '📷 Estado desde cámara'} ${caption ? `· ${caption}` : ''}`,
-    };
-    setMyStatuses((prev) => [nextStatus, ...prev]);
-    setCaption('');
-    setShowCreator(false);
+  const loadStatuses = async () => {
+    try {
+      const nextStatuses = await getStatuses();
+      setStatuses(nextStatuses);
+      const userIds = [...new Set(nextStatuses.map((item) => item.userId).filter(Boolean))];
+      const users = await getUsersByUids(userIds);
+      const map = users.reduce<Record<string, string>>((acc, item) => {
+        acc[item.uid] = item.name;
+        return acc;
+      }, {});
+      setUsersById(map);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'No se pudieron cargar los estados.');
+    }
   };
+
+  useEffect(() => {
+    loadStatuses();
+  }, []);
+
+  const onCreateStatus = async () => {
+    if (!user?.uid) {
+      return;
+    }
+
+    try {
+      setError(null);
+      await createStatus(user.uid, content);
+      setContent('');
+      setShowCreator(false);
+      await loadStatuses();
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : 'No se pudo crear el estado.');
+    }
+  };
+
+  const rows = useMemo(
+    () =>
+      statuses.map((status) => ({
+        ...status,
+        owner: status.userId === user?.uid ? 'Tu estado' : usersById[status.userId] ?? 'Usuario',
+      })),
+    [statuses, user?.uid, usersById],
+  );
 
   const insets = useSafeAreaInsets();
 
@@ -53,18 +81,16 @@ export default function StatusScreen() {
           <Ionicons name="chevron-forward" size={18} color="#A1AFC1" />
         </Pressable>
 
-        {[...myStatuses, ...statuses].map((status) => {
-          const subtitle = (status as LocalStatus).caption ?? status.time;
-          return (
+        {rows.map((status) => (
           <View key={status.id} style={styles.row}>
-            <View style={[styles.storyRing, status.viewed && styles.storyRingViewed]} />
+            <View style={styles.storyRing} />
             <View style={styles.statusTextWrap}>
-              <Text style={[styles.title, { color: palette.textPrimary }]}>{status.name}</Text>
-              <Text style={[styles.subtitle, { color: palette.textSecondary }]}>{subtitle}</Text>
+              <Text style={[styles.title, { color: palette.textPrimary }]}>{status.owner}</Text>
+              <Text style={[styles.subtitle, { color: palette.textSecondary }]}>{status.content}</Text>
             </View>
           </View>
-          );
-        })}
+        ))}
+        {error ? <Text style={styles.error}>{error}</Text> : null}
       </ScrollView>
 
       <Modal visible={showCreator} transparent animationType="slide" onRequestClose={() => setShowCreator(false)}>
@@ -73,26 +99,15 @@ export default function StatusScreen() {
             <Text style={[styles.modalTitle, { color: palette.textPrimary }]}>Nuevo estado</Text>
             <TextInput
               style={[styles.captionInput, { borderColor: palette.border, color: palette.textPrimary }]}
-              value={caption}
-              onChangeText={setCaption}
-              placeholder="Escribe algo y agrega emojis 😊"
+              value={content}
+              onChangeText={setContent}
+              placeholder="Escribe un estado..."
               placeholderTextColor="#8C9DB0"
               multiline
             />
-            <View style={styles.modalActions}>
-              <Pressable style={[styles.optionButton, { backgroundColor: isDark ? '#21314A' : '#ECF4FF' }]} onPress={() => createStatus('gallery')}>
-                <Ionicons name="images-outline" size={20} color={palette.accent} />
-                <Text style={styles.optionText}>Galería</Text>
-              </Pressable>
-              <Pressable style={[styles.optionButton, { backgroundColor: isDark ? '#21314A' : '#ECF4FF' }]} onPress={() => createStatus('camera')}>
-                <Ionicons name="camera-outline" size={20} color={palette.accent} />
-                <Text style={styles.optionText}>Cámara</Text>
-              </Pressable>
-              <Pressable style={[styles.optionButton, { backgroundColor: isDark ? '#21314A' : '#ECF4FF' }]} onPress={() => setCaption((prev) => `${prev} 😊`)}>
-                <Ionicons name="happy-outline" size={20} color={palette.accent} />
-                <Text style={styles.optionText}>Emoji</Text>
-              </Pressable>
-            </View>
+            <Pressable style={styles.publishButton} onPress={onCreateStatus}>
+              <Text style={styles.publishText}>Publicar</Text>
+            </Pressable>
             <Pressable style={styles.cancelButton} onPress={() => setShowCreator(false)}>
               <Text style={styles.cancelText}>Cancelar</Text>
             </Pressable>
@@ -122,7 +137,6 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   statusTextWrap: { flex: 1 },
   storyRing: { width: 46, height: 46, borderRadius: 23, borderWidth: 3, borderColor: '#1F7AE0', backgroundColor: '#F5FAFF' },
-  storyRingViewed: { borderColor: '#BCC9D8' },
   title: { color: '#22354D', fontWeight: '700', fontSize: 16 },
   subtitle: { color: '#6A7D95', marginTop: 1 },
   modalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(24,36,53,0.4)' },
@@ -146,16 +160,14 @@ const styles = StyleSheet.create({
     fontSize: 15,
     textAlignVertical: 'top',
   },
-  modalActions: { flexDirection: 'row', gap: 10 },
-  optionButton: {
-    flex: 1,
-    borderRadius: 12,
-    backgroundColor: '#ECF4FF',
+  publishButton: {
+    backgroundColor: '#1F7AE0',
+    borderRadius: 10,
     alignItems: 'center',
-    gap: 5,
     paddingVertical: 10,
   },
-  optionText: { fontSize: 12, fontWeight: '600', color: '#1F4E83' },
+  publishText: { color: '#FFF', fontWeight: '700' },
   cancelButton: { alignItems: 'center', paddingVertical: 10 },
   cancelText: { color: '#1F7AE0', fontWeight: '700' },
+  error: { color: '#D93025' },
 });
