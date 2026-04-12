@@ -6,19 +6,28 @@ import { MessagingRepository } from '@/src/domain/repositories/MessagingReposito
 
 const repository: MessagingRepository = isFirebaseConfigured ? firebaseMessagingRepository : mockMessagingRepository;
 
+const requireFeature = <T extends (...args: any[]) => any>(featureName: string, fn?: T): T => {
+  if (!fn) {
+    throw new Error(`La funcionalidad "${featureName}" no está disponible con el repositorio actual.`);
+  }
+
+  return fn;
+};
+
 export const signUpUseCase = (name: string, email: string, password: string) =>
-  repository.signUp?.(name, email, password);
-export const signInUseCase = (email: string, password: string) => repository.signIn?.(email, password);
-export const signOutUseCase = () => repository.signOut?.();
-export const getCurrentSessionUseCase = () => repository.getCurrentSession?.();
+  requireFeature('signUp', repository.signUp)(name, email, password);
+export const signInUseCase = (email: string, password: string) => requireFeature('signIn', repository.signIn)(email, password);
+export const signOutUseCase = () => requireFeature('signOut', repository.signOut)();
+export const getCurrentSessionUseCase = () =>
+  requireFeature('getCurrentSession', repository.getCurrentSession)();
 
 export const getChatsUseCase = () => repository.getChats();
 export const getMessagesUseCase = (chatId: string) => repository.getMessages(chatId);
 export const listenMessagesUseCase = (chatId: string, onUpdate: (messages: Message[]) => void) =>
-  repository.listenMessages?.(chatId, onUpdate);
+  requireFeature('listenMessages', repository.listenMessages)(chatId, onUpdate);
 export const sendMessageUseCase = (chatId: string, text: string) => repository.sendMessage(chatId, text);
 export const sendImageMessageUseCase = (chatId: string, localUri: string) =>
-  repository.sendImageMessage?.(chatId, localUri);
+  requireFeature('sendImageMessage', repository.sendImageMessage)(chatId, localUri);
 
 export const getCallsUseCase = () => repository.getCalls();
 export const getStatusesUseCase = () => repository.getStatuses();
