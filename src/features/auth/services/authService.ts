@@ -7,7 +7,7 @@ import {
   signOut,
 } from 'firebase/auth';
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
-import { auth, db } from '@/src/config/firebase';
+import { auth, db, firebaseConfigError } from '@/src/config/firebase';
 
 export type AppUser = {
   uid: string;
@@ -18,6 +18,14 @@ export type AppUser = {
 
 let currentUser: AppUser | null = null;
 const listeners = new Set<(user: AppUser | null) => void>();
+
+const getFirebaseClients = () => {
+  if (!auth || !db) {
+    throw new Error(firebaseConfigError ?? 'Firebase no está configurado.');
+  }
+
+  return { auth, db };
+};
 
 const mapFirebaseUser = async (user: User | null): Promise<AppUser | null> => {
   if (!user?.email) {
@@ -48,6 +56,7 @@ const normalizeAuthError = (error: unknown): Error => {
 
 export const registerUser = async (name: string, email: string, password: string): Promise<AppUser> => {
   try {
+    const { auth, db } = getFirebaseClients();
     const credentials = await createUserWithEmailAndPassword(auth, email.trim(), password);
 
     await setDoc(doc(db, 'users', credentials.user.uid), {
@@ -72,6 +81,7 @@ export const registerUser = async (name: string, email: string, password: string
 
 export const loginUser = async (email: string, password: string): Promise<AppUser> => {
   try {
+    const { auth } = getFirebaseClients();
     const credentials = await signInWithEmailAndPassword(auth, email.trim(), password);
     const mappedUser = await mapFirebaseUser(credentials.user);
 
@@ -88,6 +98,7 @@ export const loginUser = async (email: string, password: string): Promise<AppUse
 };
 
 export const logoutUser = async (): Promise<void> => {
+  const { auth } = getFirebaseClients();
   await signOut(auth);
   currentUser = null;
   notify();
@@ -97,6 +108,8 @@ export const getCurrentUser = (): AppUser | null => currentUser;
 
 export const observeAuthState = (callback: (user: AppUser | null) => void) => {
   listeners.add(callback);
+
+  const { auth } = getFirebaseClients();
 
   const unsubscribeFirebase = onAuthStateChanged(auth, async (firebaseUser) => {
     currentUser = await mapFirebaseUser(firebaseUser);
