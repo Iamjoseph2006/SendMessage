@@ -60,18 +60,16 @@ export default function ProfileSectionScreen() {
             <Text style={[styles.rowText, { color: palette.textPrimary }]}>{row}</Text>
             <Switch
               value={preferences[row]}
-              onValueChange={(value) =>
-                setPreferences((prev) => {
-                  if (section === 'appearance' && row === 'Tema oscuro') {
-                    setDarkMode(value);
-                  }
+              onValueChange={(value) => {
+                if (section === 'appearance' && row === 'Tema oscuro') {
+                  setDarkMode(value);
+                }
 
-                  return {
-                    ...prev,
-                    [row]: value,
-                  };
-                })
-              }
+                setPreferences((prev) => ({
+                  ...prev,
+                  [row]: value,
+                }));
+              }}
               trackColor={{ true: palette.accent, false: '#5B6980' }}
             />
           </View>

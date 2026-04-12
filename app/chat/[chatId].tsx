@@ -1,6 +1,9 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { Audio } from 'expo-av';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useLocalSearchParams } from 'expo-router';
 import { useMemo, useRef, useState } from 'react';
+import * as Location from 'expo-location';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ActionSheetIOS,
@@ -55,9 +58,13 @@ export default function ConversationScreen() {
   const [showAttach, setShowAttach] = useState(false);
   const [pickerType, setPickerType] = useState<'none' | 'doc' | 'gallery' | 'camera'>('none');
   const [isRecording, setIsRecording] = useState(false);
+  const [showCamera, setShowCamera] = useState(false);
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const [reactionByMessage, setReactionByMessage] = useState<Record<string, string>>({});
   const recordingPulse = useRef(new Animated.Value(1)).current;
+  const recordingRef = useRef<Audio.Recording | null>(null);
+  const cameraRef = useRef<CameraView>(null);
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const inputRef = useRef<TextInput>(null);
   const insets = useSafeAreaInsets();
 
@@ -96,84 +103,81 @@ export default function ConversationScreen() {
     sendTemplateMessage('💬 Acción de mensaje seleccionada');
   };
 
-  const openSettings = () => Linking.openSettings();
-
-  const requestCameraPermission = async () => {
-    const canOpenCamera = await Linking.canOpenURL('camera://');
-    if (!canOpenCamera) return false;
-
-    await Linking.openURL('camera://');
-    return true;
-  };
-
-  const requestMicPermission = async () => {
-    const mediaDevices = (globalThis.navigator as Navigator | undefined)?.mediaDevices;
-    if (!mediaDevices?.getUserMedia) return true;
-
-    try {
-      const stream = await mediaDevices.getUserMedia({ audio: true });
-      stream.getTracks().forEach((track) => track.stop());
-      return true;
-    } catch {
-      return false;
-    }
-  };
-
   const requestLocationPermission = async () => {
-    const geolocation = globalThis.navigator?.geolocation as
-      | (Geolocation & { requestAuthorization?: (success?: () => void, error?: () => void) => void })
-      | undefined;
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    return status === 'granted';
+  };
 
-    if (!geolocation) return false;
-
-    if (typeof geolocation.requestAuthorization === 'function') {
-      geolocation.requestAuthorization();
+  const toggleRecording = async () => {
+    if (isRecording && recordingRef.current) {
+      await recordingRef.current.stopAndUnloadAsync();
+      const uri = recordingRef.current.getURI();
+      recordingRef.current = null;
+      recordingPulse.stopAnimation();
+      setIsRecording(false);
+      await sendTemplateMessage(`🎤 Audio enviado${uri ? ` · ${uri.split('/').pop()}` : ''}`);
+      return;
     }
 
-    return new Promise<boolean>((resolve) => {
-      geolocation.getCurrentPosition(
-        () => resolve(true),
-        () => {
-          openSettings();
-          resolve(false);
-        },
-        { enableHighAccuracy: true, timeout: 6000, maximumAge: 1000 },
-      );
+    const permission = await Audio.requestPermissionsAsync();
+    if (permission.status !== 'granted') {
+      return;
+    }
+
+    await Audio.setAudioModeAsync({
+      allowsRecordingIOS: true,
+      playsInSilentModeIOS: true,
     });
+
+    const recording = new Audio.Recording();
+    await recording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+    await recording.startAsync();
+    recordingRef.current = recording;
+    setIsRecording(true);
+
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(recordingPulse, { toValue: 1.2, duration: 450, useNativeDriver: true }),
+        Animated.timing(recordingPulse, { toValue: 1, duration: 450, useNativeDriver: true }),
+      ]),
+    ).start();
+  };
+
+  const openCameraCapture = async () => {
+    const status = cameraPermission?.granted ? 'granted' : (await requestCameraPermission()).status;
+    if (status !== 'granted') {
+      return;
+    }
+    setShowCamera(true);
+  };
+
+  const takePicture = async () => {
+    const photo = await cameraRef.current?.takePictureAsync({ quality: 0.55 });
+    if (!photo?.uri) return;
+    await sendTemplateMessage(`📷 Foto enviada · ${photo.uri.split('/').pop()}`);
+    setShowCamera(false);
   };
 
   const handleAction = async (id: (typeof attachActions)[number]['id']) => {
     if (id === 'doc') setPickerType('doc');
     if (id === 'gallery') setPickerType('gallery');
     if (id === 'camera') {
-      const granted = await requestCameraPermission();
-      if (granted) sendTemplateMessage('📷 Foto tomada y enviada');
+      await openCameraCapture();
       setShowAttach(false);
     }
     if (id === 'location') {
       const granted = await requestLocationPermission();
-      if (granted) sendTemplateMessage(`📍 Ubicación compartida · ${formatTime()}`);
+      if (granted) {
+        const position = await Location.getCurrentPositionAsync({});
+        const { latitude, longitude } = position.coords;
+        await sendTemplateMessage(`📍 Ubicación: ${latitude.toFixed(5)}, ${longitude.toFixed(5)} · ${formatTime()}`);
+      } else {
+        Linking.openSettings();
+      }
       setShowAttach(false);
     }
     if (id === 'audio') {
-      const granted = await requestMicPermission();
-      if (!granted) {
-        setShowAttach(false);
-        return;
-      }
-      if (isRecording) {
-        setIsRecording(false);
-        recordingPulse.stopAnimation();
-        sendTemplateMessage('🎤 Audio (00:12)');
-      } else {
-        setIsRecording(true);
-        Animated.loop(
-          Animated.sequence([
-            Animated.timing(recordingPulse, { toValue: 1.2, duration: 450, useNativeDriver: true }),
-            Animated.timing(recordingPulse, { toValue: 1, duration: 450, useNativeDriver: true }),
-          ]),
-        ).start();
-      }
+      await toggleRecording();
       setShowAttach(false);
     }
   };
@@ -287,6 +291,22 @@ export default function ConversationScreen() {
             <Text style={styles.recordingText}>Grabando audio…</Text>
           </Animated.View>
         ) : null}
+
+        <Modal visible={showCamera} transparent animationType="slide" onRequestClose={() => setShowCamera(false)}>
+          <View style={styles.modalBackdrop}>
+            <View style={styles.cameraCard}>
+              <CameraView ref={cameraRef} style={styles.cameraPreview} facing="back" />
+              <View style={styles.cameraActions}>
+                <Pressable style={styles.cameraButton} onPress={() => setShowCamera(false)}>
+                  <Text style={styles.cameraButtonText}>Cancelar</Text>
+                </Pressable>
+                <Pressable style={styles.cameraButton} onPress={takePicture}>
+                  <Text style={styles.cameraButtonText}>Tomar foto</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
 
         <Modal visible={pickerType !== 'none'} transparent animationType="slide" onRequestClose={() => setPickerType('none')}>
           <View style={styles.modalBackdrop}>
@@ -456,4 +476,32 @@ const styles = StyleSheet.create({
   modalOptionText: { color: '#1E3856', fontSize: 15 },
   modalClose: { marginTop: 8, backgroundColor: '#ECF4FF', borderRadius: 12, paddingVertical: 11, alignItems: 'center' },
   modalCloseText: { color: '#1F7AE0', fontWeight: '700' },
+  cameraCard: {
+    marginHorizontal: 16,
+    marginBottom: 24,
+    borderRadius: 20,
+    overflow: 'hidden',
+    backgroundColor: '#0F1724',
+  },
+  cameraPreview: {
+    width: '100%',
+    height: 320,
+  },
+  cameraActions: {
+    flexDirection: 'row',
+    gap: 10,
+    padding: 12,
+    backgroundColor: '#172235',
+  },
+  cameraButton: {
+    flex: 1,
+    backgroundColor: '#1F7AE0',
+    borderRadius: 12,
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  cameraButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
 });
