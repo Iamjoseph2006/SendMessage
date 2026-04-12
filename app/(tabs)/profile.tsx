@@ -1,8 +1,9 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useProfileViewModel } from '@/src/presentation/viewmodels/useProfileViewModel';
+import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
 
 const options = [
   { id: 'notifications', icon: 'notifications-outline', label: 'Notificaciones' },
@@ -13,30 +14,35 @@ const options = [
 
 export default function ProfileScreen() {
   const { profile } = useProfileViewModel();
+  const { isDark } = useAppTheme();
+  const palette = isDark ? darkPalette : lightPalette;
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
   if (!profile) return null;
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background }]}>
       <View style={[styles.header, { paddingTop: insets.top + 4 }]}>
-        <Text style={styles.headerTitle}>Perfil</Text>
+        <Text style={[styles.headerTitle, { color: palette.textPrimary }]}>Perfil</Text>
       </View>
       <View style={styles.container}>
-        <View style={styles.headerCard}>
-          <View style={styles.profilePhoto}>
-            <Text style={styles.profileInitial}>{profile.name.charAt(0)}</Text>
+        <View style={[styles.headerCard, { borderColor: palette.border, backgroundColor: palette.surface }]}>
+          <View style={[styles.profilePhoto, { backgroundColor: isDark ? '#21314A' : '#D9EAFF' }]}>
+            <Text style={[styles.profileInitial, { color: palette.textPrimary }]}>{profile.name.charAt(0)}</Text>
           </View>
-          <Text style={styles.name}>{profile.name}</Text>
-          <Text style={styles.about}>{profile.about}</Text>
-          <Text style={styles.phone}>{profile.phone}</Text>
+          <Text style={[styles.name, { color: palette.textPrimary }]}>{profile.name}</Text>
+          <Text style={[styles.about, { color: palette.textSecondary }]}>{profile.about}</Text>
+          <Text style={[styles.phone, { color: palette.textSecondary }]}>{profile.phone}</Text>
         </View>
 
         {options.map((option) => (
-          <Pressable key={option.id} style={styles.optionRow} onPress={() => router.push(`/profile/${option.id}`)}>
-            <Ionicons name={option.icon} size={20} color="#1F7AE0" />
-            <Text style={styles.optionText}>{option.label}</Text>
+          <Pressable
+            key={option.id}
+            style={[styles.optionRow, { borderColor: palette.border, backgroundColor: palette.surface }]}
+            onPress={() => router.push(`/profile/${option.id}`)}>
+            <Ionicons name={option.icon} size={20} color={palette.accent} />
+            <Text style={[styles.optionText, { color: palette.textPrimary }]}>{option.label}</Text>
             <Ionicons name="chevron-forward" size={18} color="#A1AFC1" />
           </Pressable>
         ))}

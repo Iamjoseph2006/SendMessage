@@ -1,6 +1,9 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Stack, useLocalSearchParams } from 'expo-router';
-import { SafeAreaView, StyleSheet, Switch, Text, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { StyleSheet, Switch, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
 
 const sectionConfig = {
   notifications: {
@@ -16,7 +19,7 @@ const sectionConfig = {
   appearance: {
     title: 'Apariencia',
     icon: 'color-palette-outline',
-    rows: ['Tema claro', 'Tamaño de texto', 'Fondo de chat'],
+    rows: ['Tema oscuro', 'Tamaño de texto', 'Fondo de chat'],
   },
   help: {
     title: 'Ayuda',
@@ -26,22 +29,49 @@ const sectionConfig = {
 } as const;
 
 export default function ProfileSectionScreen() {
+  const { isDark, setDarkMode } = useAppTheme();
   const { section } = useLocalSearchParams<{ section: keyof typeof sectionConfig }>();
   const current = sectionConfig[section] ?? sectionConfig.help;
+  const palette = isDark ? darkPalette : lightPalette;
+  const defaultPreferences = useMemo(
+    () =>
+      Object.fromEntries(
+        current.rows.map((row, index) => [row, section === 'appearance' ? (row === 'Tema oscuro' ? isDark : index === 1) : index === 0]),
+      ) as Record<string, boolean>,
+    [current.rows, isDark, section],
+  );
+  const [preferences, setPreferences] = useState<Record<string, boolean>>(defaultPreferences);
+
+  useEffect(() => {
+    setPreferences(defaultPreferences);
+  }, [defaultPreferences]);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background }]}>
       <Stack.Screen options={{ title: current.title }} />
       <View style={styles.container}>
-        <View style={styles.hero}>
-          <Ionicons name={current.icon} size={24} color="#1F7AE0" />
-          <Text style={styles.heroTitle}>{current.title}</Text>
+        <View style={[styles.hero, { borderColor: palette.border, backgroundColor: palette.surface }]}>
+          <Ionicons name={current.icon} size={24} color={palette.accent} />
+          <Text style={[styles.heroTitle, { color: palette.textPrimary }]}>{current.title}</Text>
         </View>
 
         {current.rows.map((row) => (
-          <View key={row} style={styles.row}>
-            <Text style={styles.rowText}>{row}</Text>
-            <Switch value trackColor={{ true: '#1F7AE0', false: '#D5DDE8' }} />
+          <View key={row} style={[styles.row, { borderColor: palette.border, backgroundColor: palette.surface }]}>
+            <Text style={[styles.rowText, { color: palette.textPrimary }]}>{row}</Text>
+            <Switch
+              value={preferences[row]}
+              onValueChange={(value) => {
+                if (section === 'appearance' && row === 'Tema oscuro') {
+                  setDarkMode(value);
+                }
+
+                setPreferences((prev) => ({
+                  ...prev,
+                  [row]: value,
+                }));
+              }}
+              trackColor={{ true: palette.accent, false: '#5B6980' }}
+            />
           </View>
         ))}
       </View>
@@ -50,7 +80,7 @@ export default function ProfileSectionScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#FFF' },
+  safeArea: { flex: 1 },
   container: { padding: 16, gap: 12 },
   hero: {
     borderRadius: 16,
