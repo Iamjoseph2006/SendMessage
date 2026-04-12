@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "186014509279",
+    "project_id": "sendmessage-cc6aa",
+    "storage_bucket": "sendmessage-cc6aa.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:186014509279:android:f98bfc4885ef8f3b51216a",
+        "android_client_info": {
+          "package_name": "com.sendmessage"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCf8lunemN7dIDirrYQod8f75-Mb5JL3wc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
