@@ -1,5 +1,4 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Audio } from 'expo-av';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useLocalSearchParams } from 'expo-router';
 import { useMemo, useRef, useState } from 'react';
@@ -9,6 +8,7 @@ import {
   ActionSheetIOS,
   Animated,
   FlatList,
+  Image,
   KeyboardAvoidingView,
   Linking,
   Modal,
@@ -42,11 +42,7 @@ const messageActions = ['Responder', 'Reenviar', 'Copiar', 'Destacar', 'Eliminar
 const quickReactions = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 const mockFiles = ['Contrato.pdf', 'PlanProyecto.docx', 'Resumen.xlsx'];
 const mockPhotos = ['IMG_1024.JPG', 'IMG_1025.JPG', 'IMG_1026.JPG'];
-
-const formatTime = () => {
-  const now = new Date();
-  return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-};
+const mapPrefix = 'map:';
 
 export default function ConversationScreen() {
   const { chatId } = useLocalSearchParams<{ chatId: string }>();
@@ -59,10 +55,11 @@ export default function ConversationScreen() {
   const [pickerType, setPickerType] = useState<'none' | 'doc' | 'gallery' | 'camera'>('none');
   const [isRecording, setIsRecording] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
+  const [showChatInfo, setShowChatInfo] = useState(false);
+  const [activeCallMode, setActiveCallMode] = useState<'audio' | 'video' | null>(null);
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const [reactionByMessage, setReactionByMessage] = useState<Record<string, string>>({});
   const recordingPulse = useRef(new Animated.Value(1)).current;
-  const recordingRef = useRef<Audio.Recording | null>(null);
   const cameraRef = useRef<CameraView>(null);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const inputRef = useRef<TextInput>(null);
@@ -109,30 +106,12 @@ export default function ConversationScreen() {
   };
 
   const toggleRecording = async () => {
-    if (isRecording && recordingRef.current) {
-      await recordingRef.current.stopAndUnloadAsync();
-      const uri = recordingRef.current.getURI();
-      recordingRef.current = null;
+    if (isRecording) {
       recordingPulse.stopAnimation();
       setIsRecording(false);
-      await sendTemplateMessage(`🎤 Audio enviado${uri ? ` · ${uri.split('/').pop()}` : ''}`);
+      await sendTemplateMessage('🎤 Nota de voz (00:08)');
       return;
     }
-
-    const permission = await Audio.requestPermissionsAsync();
-    if (permission.status !== 'granted') {
-      return;
-    }
-
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: true,
-      playsInSilentModeIOS: true,
-    });
-
-    const recording = new Audio.Recording();
-    await recording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-    await recording.startAsync();
-    recordingRef.current = recording;
     setIsRecording(true);
 
     Animated.loop(
@@ -170,7 +149,7 @@ export default function ConversationScreen() {
       if (granted) {
         const position = await Location.getCurrentPositionAsync({});
         const { latitude, longitude } = position.coords;
-        await sendTemplateMessage(`📍 Ubicación: ${latitude.toFixed(5)}, ${longitude.toFixed(5)} · ${formatTime()}`);
+        await sendTemplateMessage(`${mapPrefix}${latitude.toFixed(5)},${longitude.toFixed(5)}`);
       } else {
         Linking.openSettings();
       }
@@ -186,15 +165,15 @@ export default function ConversationScreen() {
     <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background }]}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.safeArea}>
         <View style={[styles.header, { paddingTop: insets.top + 4, borderBottomColor: palette.border, backgroundColor: palette.surface }]}>
-          <View>
+          <Pressable onPress={() => setShowChatInfo(true)}>
             <Text style={[styles.headerName, { color: palette.textPrimary }]}>{chatName}</Text>
             <Text style={[styles.headerSubtitle, { color: palette.textSecondary }]}>En línea</Text>
-          </View>
+          </Pressable>
           <View style={styles.headerActions}>
-            <Pressable style={styles.headerActionButton}>
+            <Pressable style={styles.headerActionButton} onPress={() => setActiveCallMode('audio')}>
               <Ionicons name="call-outline" size={18} color="#1F7AE0" />
             </Pressable>
-            <Pressable style={styles.headerActionButton}>
+            <Pressable style={styles.headerActionButton} onPress={() => setActiveCallMode('video')}>
               <Ionicons name="videocam-outline" size={19} color="#1F7AE0" />
             </Pressable>
           </View>
@@ -209,6 +188,13 @@ export default function ConversationScreen() {
             const icon = statusIcon(item.status);
             const reaction = reactionByMessage[item.id];
             const selected = selectedMessageId === item.id;
+            const isMap = item.text.startsWith(mapPrefix);
+            const locationData = isMap ? item.text.replace(mapPrefix, '') : '';
+            const [lat, lng] = locationData.split(',');
+            const mapUrl =
+              isMap && lat && lng
+                ? `https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lng}&zoom=15&size=600x320&markers=${lat},${lng},red-pushpin`
+                : '';
             return (
               <Pressable onLongPress={() => openMessageActions(item)} delayLongPress={180}>
                 {selected ? (
@@ -233,9 +219,16 @@ export default function ConversationScreen() {
                     selected && styles.selectedBubble,
                     item.sender === 'contact' && isDark && { backgroundColor: '#18263A', borderColor: '#2D4363' },
                   ]}>
-                  <Text style={[styles.bubbleText, item.sender === 'me' && styles.meText, isDark && item.sender === 'contact' && { color: '#E9F0FA' }]}>
-                    {item.text}
-                  </Text>
+                  {isMap ? (
+                    <Pressable onPress={() => Linking.openURL(`https://maps.google.com/?q=${lat},${lng}`)}>
+                      <Image source={{ uri: mapUrl }} style={styles.mapPreview} />
+                      <Text style={[styles.mapCaption, item.sender === 'me' && styles.meText]}>Ubicación compartida</Text>
+                    </Pressable>
+                  ) : (
+                    <Text style={[styles.bubbleText, item.sender === 'me' && styles.meText, isDark && item.sender === 'contact' && { color: '#E9F0FA' }]}>
+                      {item.text}
+                    </Text>
+                  )}
                   <View style={styles.rowMeta}>
                     {reaction ? <Text style={styles.reactionTag}>{reaction}</Text> : null}
                     <Text style={styles.time}>{item.time}</Text>
@@ -292,6 +285,18 @@ export default function ConversationScreen() {
           </Animated.View>
         ) : null}
 
+        {activeCallMode ? (
+          <View style={styles.callBanner}>
+            <Ionicons name={activeCallMode === 'audio' ? 'call' : 'videocam'} size={15} color="#FFFFFF" />
+            <Text style={styles.callBannerText}>
+              {activeCallMode === 'audio' ? 'Llamada' : 'Videollamada'} en curso con {chatName}
+            </Text>
+            <Pressable onPress={() => setActiveCallMode(null)} hitSlop={6}>
+              <Ionicons name="close" size={17} color="#FFFFFF" />
+            </Pressable>
+          </View>
+        ) : null}
+
         <Modal visible={showCamera} transparent animationType="slide" onRequestClose={() => setShowCamera(false)}>
           <View style={styles.modalBackdrop}>
             <View style={styles.cameraCard}>
@@ -304,6 +309,19 @@ export default function ConversationScreen() {
                   <Text style={styles.cameraButtonText}>Tomar foto</Text>
                 </Pressable>
               </View>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal visible={showChatInfo} transparent animationType="fade" onRequestClose={() => setShowChatInfo(false)}>
+          <View style={styles.modalBackdrop}>
+            <View style={styles.infoCard}>
+              <Text style={styles.infoTitle}>{chatName}</Text>
+              <Text style={styles.infoText}>Chat seguro · Mensajes sincronizados</Text>
+              <Text style={styles.infoText}>Participantes: Tú y {chatName}</Text>
+              <Pressable style={styles.infoClose} onPress={() => setShowChatInfo(false)}>
+                <Text style={styles.infoCloseText}>Cerrar</Text>
+              </Pressable>
             </View>
           </View>
         </Modal>
@@ -363,6 +381,8 @@ const styles = StyleSheet.create({
   contact: { alignSelf: 'flex-start', backgroundColor: '#FFF', borderWidth: 1, borderColor: '#E3EAF4' },
   selectedBubble: { shadowColor: '#1F7AE0', shadowOpacity: 0.2, shadowRadius: 8, shadowOffset: { width: 0, height: 3 } },
   bubbleText: { color: '#273A52', fontSize: 15 },
+  mapPreview: { width: 240, height: 140, borderRadius: 12, backgroundColor: '#DCE7F5' },
+  mapCaption: { color: '#1A2B44', fontSize: 12, marginTop: 6, fontWeight: '600' },
   meText: { color: '#1B3552' },
   rowMeta: { flexDirection: 'row', alignSelf: 'flex-end', alignItems: 'center', gap: 4, marginTop: 4 },
   reactionTag: { fontSize: 12 },
@@ -457,6 +477,20 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   recordingText: { color: '#FFFFFF', fontWeight: '600', fontSize: 12 },
+  callBanner: {
+    position: 'absolute',
+    bottom: 80,
+    left: 12,
+    right: 12,
+    backgroundColor: '#1F7AE0',
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  callBannerText: { flex: 1, color: '#FFFFFF', fontWeight: '600' },
   modalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(24,36,53,0.4)' },
   modalCard: {
     backgroundColor: '#FFF',
@@ -477,20 +511,21 @@ const styles = StyleSheet.create({
   modalClose: { marginTop: 8, backgroundColor: '#ECF4FF', borderRadius: 12, paddingVertical: 11, alignItems: 'center' },
   modalCloseText: { color: '#1F7AE0', fontWeight: '700' },
   cameraCard: {
-    marginHorizontal: 16,
-    marginBottom: 24,
-    borderRadius: 20,
+    flex: 1,
+    marginHorizontal: 0,
+    marginBottom: 0,
+    borderRadius: 0,
     overflow: 'hidden',
     backgroundColor: '#0F1724',
   },
   cameraPreview: {
     width: '100%',
-    height: 320,
+    height: '88%',
   },
   cameraActions: {
     flexDirection: 'row',
     gap: 10,
-    padding: 12,
+    padding: 16,
     backgroundColor: '#172235',
   },
   cameraButton: {
@@ -504,4 +539,22 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '700',
   },
+  infoCard: {
+    marginHorizontal: 24,
+    marginBottom: 40,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    padding: 16,
+    gap: 8,
+  },
+  infoTitle: { fontSize: 18, fontWeight: '800', color: '#1A2B44' },
+  infoText: { color: '#4E647E' },
+  infoClose: {
+    marginTop: 8,
+    alignItems: 'center',
+    backgroundColor: '#ECF4FF',
+    borderRadius: 12,
+    paddingVertical: 10,
+  },
+  infoCloseText: { color: '#1F7AE0', fontWeight: '700' },
 });

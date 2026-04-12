@@ -80,6 +80,11 @@ export class MockMessagingRepository implements MessagingRepository {
 
     const existing = this.messages.get(chatId) ?? [];
     this.messages.set(chatId, [...existing, message]);
+    const chat = chatSummaries.find((item) => item.id === chatId);
+    if (chat) {
+      chat.lastMessage = text;
+      chat.time = message.time;
+    }
 
     return message;
   }
