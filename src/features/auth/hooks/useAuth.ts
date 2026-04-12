@@ -12,7 +12,7 @@ type AuthState = {
   user: AppUser | null;
   loading: boolean;
   error: string | null;
-  register: (email: string, password: string) => Promise<void>;
+  register: (name: string, email: string, password: string) => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
 };
@@ -37,6 +37,7 @@ export const useAuth = (): AuthState => {
       await action();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error de autenticación.');
+      throw err;
     }
   };
 
@@ -44,7 +45,8 @@ export const useAuth = (): AuthState => {
     user,
     loading,
     error,
-    register: async (email: string, password: string) => handleAction(() => registerUser(email, password)),
+    register: async (name: string, email: string, password: string) =>
+      handleAction(() => registerUser(name, email, password)),
     login: async (email: string, password: string) => handleAction(() => loginUser(email, password)),
     logout: async () => handleAction(logoutUser),
   };
