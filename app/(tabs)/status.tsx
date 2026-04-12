@@ -1,8 +1,9 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState } from 'react';
-import { Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useStatusesViewModel } from '@/src/presentation/viewmodels/useStatusesViewModel';
+import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
 
 type LocalStatus = {
   id: string;
@@ -14,6 +15,8 @@ type LocalStatus = {
 
 export default function StatusScreen() {
   const { statuses } = useStatusesViewModel();
+  const { isDark } = useAppTheme();
+  const palette = isDark ? darkPalette : lightPalette;
   const [showCreator, setShowCreator] = useState(false);
   const [caption, setCaption] = useState('');
   const [myStatuses, setMyStatuses] = useState<LocalStatus[]>([]);
@@ -34,18 +37,18 @@ export default function StatusScreen() {
   const insets = useSafeAreaInsets();
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background }]}>
       <View style={[styles.header, { paddingTop: insets.top + 4 }]}>
-        <Text style={styles.headerTitle}>Estados</Text>
+        <Text style={[styles.headerTitle, { color: palette.textPrimary }]}>Estados</Text>
       </View>
       <ScrollView contentContainerStyle={styles.container}>
-        <Pressable style={styles.addStatus} onPress={() => setShowCreator(true)}>
-          <View style={styles.avatar}>
-            <Ionicons name="add" size={22} color="#1F7AE0" />
+        <Pressable style={[styles.addStatus, { borderColor: palette.border, backgroundColor: palette.surface }]} onPress={() => setShowCreator(true)}>
+          <View style={[styles.avatar, { backgroundColor: isDark ? '#21314A' : '#EAF3FF' }]}>
+            <Ionicons name="add" size={22} color={palette.accent} />
           </View>
           <View style={styles.myStatusText}>
-            <Text style={styles.title}>Mi estado</Text>
-            <Text style={styles.subtitle}>Comparte una actualización</Text>
+            <Text style={[styles.title, { color: palette.textPrimary }]}>Mi estado</Text>
+            <Text style={[styles.subtitle, { color: palette.textSecondary }]}>Comparte una actualización</Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color="#A1AFC1" />
         </Pressable>
@@ -56,8 +59,8 @@ export default function StatusScreen() {
           <View key={status.id} style={styles.row}>
             <View style={[styles.storyRing, status.viewed && styles.storyRingViewed]} />
             <View style={styles.statusTextWrap}>
-              <Text style={styles.title}>{status.name}</Text>
-              <Text style={styles.subtitle}>{subtitle}</Text>
+              <Text style={[styles.title, { color: palette.textPrimary }]}>{status.name}</Text>
+              <Text style={[styles.subtitle, { color: palette.textSecondary }]}>{subtitle}</Text>
             </View>
           </View>
           );
@@ -66,10 +69,10 @@ export default function StatusScreen() {
 
       <Modal visible={showCreator} transparent animationType="slide" onRequestClose={() => setShowCreator(false)}>
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Nuevo estado</Text>
+          <View style={[styles.modalCard, { backgroundColor: palette.surface }]}>
+            <Text style={[styles.modalTitle, { color: palette.textPrimary }]}>Nuevo estado</Text>
             <TextInput
-              style={styles.captionInput}
+              style={[styles.captionInput, { borderColor: palette.border, color: palette.textPrimary }]}
               value={caption}
               onChangeText={setCaption}
               placeholder="Escribe algo y agrega emojis 😊"
@@ -77,16 +80,16 @@ export default function StatusScreen() {
               multiline
             />
             <View style={styles.modalActions}>
-              <Pressable style={styles.optionButton} onPress={() => createStatus('gallery')}>
-                <Ionicons name="images-outline" size={20} color="#1F7AE0" />
+              <Pressable style={[styles.optionButton, { backgroundColor: isDark ? '#21314A' : '#ECF4FF' }]} onPress={() => createStatus('gallery')}>
+                <Ionicons name="images-outline" size={20} color={palette.accent} />
                 <Text style={styles.optionText}>Galería</Text>
               </Pressable>
-              <Pressable style={styles.optionButton} onPress={() => createStatus('camera')}>
-                <Ionicons name="camera-outline" size={20} color="#1F7AE0" />
+              <Pressable style={[styles.optionButton, { backgroundColor: isDark ? '#21314A' : '#ECF4FF' }]} onPress={() => createStatus('camera')}>
+                <Ionicons name="camera-outline" size={20} color={palette.accent} />
                 <Text style={styles.optionText}>Cámara</Text>
               </Pressable>
-              <Pressable style={styles.optionButton} onPress={() => setCaption((prev) => `${prev} 😊`)}>
-                <Ionicons name="happy-outline" size={20} color="#1F7AE0" />
+              <Pressable style={[styles.optionButton, { backgroundColor: isDark ? '#21314A' : '#ECF4FF' }]} onPress={() => setCaption((prev) => `${prev} 😊`)}>
+                <Ionicons name="happy-outline" size={20} color={palette.accent} />
                 <Text style={styles.optionText}>Emoji</Text>
               </Pressable>
             </View>

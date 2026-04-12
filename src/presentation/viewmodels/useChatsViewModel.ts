@@ -6,7 +6,20 @@ export const useChatsViewModel = () => {
   const [chats, setChats] = useState<ChatSummary[]>([]);
 
   useEffect(() => {
-    getChatsUseCase().then(setChats);
+    let mounted = true;
+    const fetchChats = () => {
+      getChatsUseCase().then((nextChats) => {
+        if (mounted) setChats([...nextChats]);
+      });
+    };
+
+    fetchChats();
+    const timer = setInterval(fetchChats, 1200);
+
+    return () => {
+      mounted = false;
+      clearInterval(timer);
+    };
   }, []);
 
   return { chats };

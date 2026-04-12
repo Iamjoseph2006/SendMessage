@@ -1,22 +1,25 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { FlatList, Modal, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChatSummary } from '@/src/domain/entities';
 import { useChatsViewModel } from '@/src/presentation/viewmodels/useChatsViewModel';
+import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
 
 export default function ChatsScreen() {
   const { chats } = useChatsViewModel();
+  const { isDark } = useAppTheme();
+  const palette = isDark ? darkPalette : lightPalette;
   const router = useRouter();
   const [previewChat, setPreviewChat] = useState<ChatSummary | null>(null);
 
   const insets = useSafeAreaInsets();
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background }]}>
       <View style={[styles.header, { paddingTop: insets.top + 4 }]}>
-        <Text style={styles.title}>Chats</Text>
+        <Text style={[styles.title, { color: palette.textPrimary }]}>Chats</Text>
       </View>
       <FlatList
         data={chats}
@@ -33,14 +36,14 @@ export default function ChatsScreen() {
             </View>
 
             <View style={styles.textWrap}>
-              <Text style={styles.name}>{item.name}</Text>
-              <Text numberOfLines={1} style={styles.lastMessage}>
+              <Text style={[styles.name, { color: palette.textPrimary }]}>{item.name}</Text>
+              <Text numberOfLines={1} style={[styles.lastMessage, { color: palette.textSecondary }]}>
                 {item.lastMessage}
               </Text>
             </View>
 
             <View style={styles.rightColumn}>
-              <Text style={styles.time}>{item.time}</Text>
+              <Text style={[styles.time, { color: palette.textSecondary }]}>{item.time}</Text>
               {item.unreadCount > 0 ? (
                 <View style={styles.badge}>
                   <Text style={styles.badgeText}>{item.unreadCount}</Text>
@@ -55,10 +58,10 @@ export default function ChatsScreen() {
 
       <Modal visible={!!previewChat} transparent animationType="fade" onRequestClose={() => setPreviewChat(null)}>
         <Pressable style={styles.previewBackdrop} onPress={() => setPreviewChat(null)}>
-          <View style={styles.previewCard}>
-            <Text style={styles.previewName}>{previewChat?.name}</Text>
-            <Text style={styles.previewText}>{previewChat?.lastMessage}</Text>
-            <Text style={styles.previewHint}>Desliza para abrir chat</Text>
+          <View style={[styles.previewCard, { backgroundColor: palette.surface }]}>
+            <Text style={[styles.previewName, { color: palette.textPrimary }]}>{previewChat?.name}</Text>
+            <Text style={[styles.previewText, { color: palette.textSecondary }]}>{previewChat?.lastMessage}</Text>
+            <Text style={[styles.previewHint, { color: palette.textSecondary }]}>Desliza para abrir chat</Text>
           </View>
         </Pressable>
       </Modal>
