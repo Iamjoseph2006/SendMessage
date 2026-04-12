@@ -11,28 +11,29 @@ type FirebaseEnvKey =
   | 'EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET'
   | 'EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID';
 
-const getRequiredEnv = (key: FirebaseEnvKey): string => {
-  const value = process.env[key]?.trim();
+const getEnv = (key: FirebaseEnvKey): string => process.env[key]?.trim() ?? '';
 
-  if (!value) {
-    throw new Error(`Falta la variable de entorno requerida: ${key}.`);
-  }
+const requiredEnvKeys: FirebaseEnvKey[] = [
+  'EXPO_PUBLIC_FIREBASE_API_KEY',
+  'EXPO_PUBLIC_FIREBASE_PROJECT_ID',
+  'EXPO_PUBLIC_FIREBASE_APP_ID',
+];
 
-  return value;
-};
+const missingKeys = requiredEnvKeys.filter((key) => getEnv(key).length === 0);
 
-const getOptionalEnv = (key: FirebaseEnvKey): string | undefined => {
-  const value = process.env[key]?.trim();
-  return value ? value : undefined;
-};
+export const isFirebaseConfigured = missingKeys.length === 0;
+
+export const firebaseConfigError = isFirebaseConfigured
+  ? null
+  : `Configura las variables EXPO_PUBLIC_FIREBASE_* (faltan: ${missingKeys.join(', ')}).`;
 
 const firebaseConfig = {
-  apiKey: getRequiredEnv('EXPO_PUBLIC_FIREBASE_API_KEY'),
-  projectId: getRequiredEnv('EXPO_PUBLIC_FIREBASE_PROJECT_ID'),
-  appId: getRequiredEnv('EXPO_PUBLIC_FIREBASE_APP_ID'),
-  authDomain: getOptionalEnv('EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN'),
-  storageBucket: getOptionalEnv('EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET'),
-  messagingSenderId: getOptionalEnv('EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID'),
+  apiKey: getEnv('EXPO_PUBLIC_FIREBASE_API_KEY'),
+  projectId: getEnv('EXPO_PUBLIC_FIREBASE_PROJECT_ID'),
+  appId: getEnv('EXPO_PUBLIC_FIREBASE_APP_ID'),
+  authDomain: getEnv('EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN') || undefined,
+  storageBucket: getEnv('EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET') || undefined,
+  messagingSenderId: getEnv('EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID') || undefined,
 };
 
 const app: FirebaseApp | null = isFirebaseConfigured
@@ -43,13 +44,6 @@ const app: FirebaseApp | null = isFirebaseConfigured
 
 const auth: Auth | null = app ? getAuth(app) : null;
 const db: Firestore | null = app ? getFirestore(app) : null;
-
-export const firebaseConfigError = isFirebaseConfigured
-  ? null
-  : `Configura las variables EXPO_PUBLIC_FIREBASE_* (faltan: ${missingKeys.join(', ')}).`;
-
-export const isFirebaseConfigured = true;
-export const firebaseConfigError = null;
 
 export const firestoreBaseUrl = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents`;
 export const authBaseUrl = 'https://identitytoolkit.googleapis.com/v1';
