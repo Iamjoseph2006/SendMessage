@@ -19,12 +19,23 @@ export type AppUser = {
 let currentUser: AppUser | null = null;
 const listeners = new Set<(user: AppUser | null) => void>();
 
-const getFirebaseClients = () => {
-  if (!auth || !db) {
-    throw new Error(firebaseConfigError ?? 'Firebase no está configurado.');
+const firebaseNotConfiguredError = () =>
+  new Error(firebaseConfigError ?? 'Firebase no está configurado.');
+
+const getAuthClient = () => {
+  if (!auth) {
+    throw firebaseNotConfiguredError();
   }
 
-  return { auth, db };
+  return auth;
+};
+
+const getFirestoreClient = () => {
+  if (!db) {
+    throw firebaseNotConfiguredError();
+  }
+
+  return db;
 };
 
 const mapFirebaseUser = async (user: User | null): Promise<AppUser | null> => {
@@ -56,10 +67,11 @@ const normalizeAuthError = (error: unknown): Error => {
 
 export const registerUser = async (name: string, email: string, password: string): Promise<AppUser> => {
   try {
-    const { auth, db } = getFirebaseClients();
-    const credentials = await createUserWithEmailAndPassword(auth, email.trim(), password);
+    const authClient = getAuthClient();
+    const firestoreClient = getFirestoreClient();
+    const credentials = await createUserWithEmailAndPassword(authClient, email.trim(), password);
 
-    await setDoc(doc(db, 'users', credentials.user.uid), {
+    await setDoc(doc(firestoreClient, 'users', credentials.user.uid), {
       uid: credentials.user.uid,
       name: name.trim(),
       email: credentials.user.email,
@@ -81,8 +93,8 @@ export const registerUser = async (name: string, email: string, password: string
 
 export const loginUser = async (email: string, password: string): Promise<AppUser> => {
   try {
-    const { auth } = getFirebaseClients();
-    const credentials = await signInWithEmailAndPassword(auth, email.trim(), password);
+    const authClient = getAuthClient();
+    const credentials = await signInWithEmailAndPassword(authClient, email.trim(), password);
     const mappedUser = await mapFirebaseUser(credentials.user);
 
     if (!mappedUser) {
@@ -98,8 +110,8 @@ export const loginUser = async (email: string, password: string): Promise<AppUse
 };
 
 export const logoutUser = async (): Promise<void> => {
-  const { auth } = getFirebaseClients();
-  await signOut(auth);
+  const authClient = getAuthClient();
+  await signOut(authClient);
   currentUser = null;
   notify();
 };
@@ -109,7 +121,14 @@ export const getCurrentUser = (): AppUser | null => currentUser;
 export const observeAuthState = (callback: (user: AppUser | null) => void) => {
   listeners.add(callback);
 
-  const { auth } = getFirebaseClients();
+  if (!auth) {
+    currentUser = null;
+    callback(currentUser);
+
+    return () => {
+      listeners.delete(callback);
+    };
+  }
 
   const unsubscribeFirebase = onAuthStateChanged(auth, async (firebaseUser) => {
     currentUser = await mapFirebaseUser(firebaseUser);
