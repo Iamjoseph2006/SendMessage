@@ -1,5 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Stack, useLocalSearchParams } from 'expo-router';
+import { useEffect, useMemo, useState } from 'react';
 import { SafeAreaView, StyleSheet, Switch, Text, View } from 'react-native';
 
 const sectionConfig = {
@@ -28,6 +29,18 @@ const sectionConfig = {
 export default function ProfileSectionScreen() {
   const { section } = useLocalSearchParams<{ section: keyof typeof sectionConfig }>();
   const current = sectionConfig[section] ?? sectionConfig.help;
+  const defaultPreferences = useMemo(
+    () =>
+      Object.fromEntries(
+        current.rows.map((row, index) => [row, index === 0]),
+      ) as Record<string, boolean>,
+    [current.rows],
+  );
+  const [preferences, setPreferences] = useState<Record<string, boolean>>(defaultPreferences);
+
+  useEffect(() => {
+    setPreferences(defaultPreferences);
+  }, [defaultPreferences]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -41,7 +54,16 @@ export default function ProfileSectionScreen() {
         {current.rows.map((row) => (
           <View key={row} style={styles.row}>
             <Text style={styles.rowText}>{row}</Text>
-            <Switch value trackColor={{ true: '#1F7AE0', false: '#D5DDE8' }} />
+            <Switch
+              value={preferences[row]}
+              onValueChange={(value) =>
+                setPreferences((prev) => ({
+                  ...prev,
+                  [row]: value,
+                }))
+              }
+              trackColor={{ true: '#1F7AE0', false: '#D5DDE8' }}
+            />
           </View>
         ))}
       </View>

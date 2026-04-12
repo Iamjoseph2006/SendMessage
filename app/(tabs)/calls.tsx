@@ -1,5 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useState } from 'react';
 import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import { useCallsViewModel } from '@/src/presentation/viewmodels/useCallsViewModel';
 
@@ -11,8 +12,15 @@ const callTypeLabel = {
 
 export default function CallsScreen() {
   const { calls } = useCallsViewModel();
+  const [activeCall, setActiveCall] = useState<string | null>(null);
+  const [callMode, setCallMode] = useState<'audio' | 'video'>('audio');
 
   const insets = useSafeAreaInsets();
+
+  const triggerCall = (name: string, mode: 'audio' | 'video') => {
+    setCallMode(mode);
+    setActiveCall(name);
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -32,16 +40,28 @@ export default function CallsScreen() {
               </Text>
             </View>
             <View style={styles.actions}>
-              <Pressable style={styles.iconAction}>
+              <Pressable style={styles.iconAction} onPress={() => triggerCall(call.name, 'audio')}>
                 <Ionicons name="call" size={18} color="#1F7AE0" />
               </Pressable>
-              <Pressable style={styles.iconAction}>
+              <Pressable style={styles.iconAction} onPress={() => triggerCall(call.name, 'video')}>
                 <Ionicons name="videocam" size={20} color="#1F7AE0" />
               </Pressable>
             </View>
           </View>
         ))}
       </View>
+
+      {activeCall ? (
+        <View style={styles.callBanner}>
+          <Ionicons name={callMode === 'audio' ? 'call' : 'videocam'} size={15} color="#FFFFFF" />
+          <Text style={styles.callBannerText}>
+            {callMode === 'audio' ? 'Llamando' : 'Videollamando'} a {activeCall}...
+          </Text>
+          <Pressable onPress={() => setActiveCall(null)} hitSlop={6}>
+            <Ionicons name="close" size={17} color="#FFFFFF" />
+          </Pressable>
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -75,4 +95,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  callBanner: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    bottom: 20,
+    backgroundColor: '#1F7AE0',
+    borderRadius: 14,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  callBannerText: { flex: 1, color: '#FFFFFF', fontWeight: '600' },
 });

@@ -16,19 +16,42 @@ const advanceStatus = (messages: Message[]) =>
     return { ...message, status: nextStatus[message.status] };
   });
 
+const mergeMessages = (current: Message[], incoming: Message[]) => {
+  const merged = new Map<string, Message>();
+
+  current.forEach((message) => merged.set(message.id, message));
+  incoming.forEach((message) => merged.set(message.id, message));
+
+  return [...merged.values()].sort((a, b) => (a.createdAt ?? '').localeCompare(b.createdAt ?? ''));
+};
+
 export const useConversationViewModel = (chatId: string) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getMessagesUseCase(chatId).then(setMessages);
+    let isMounted = true;
+    setError(null);
+
+    getMessagesUseCase(chatId)
+      .then((initialMessages) => {
+        if (!isMounted) return;
+        setMessages(initialMessages);
+      })
+      .catch((err: unknown) => {
+        if (!isMounted) return;
+        setError(err instanceof Error ? err.message : 'No se pudieron cargar los mensajes.');
+      });
 
     const unsubscribe = listenMessagesUseCase(chatId, (nextMessages: Message[]) => {
-      setMessages(nextMessages);
+      if (!isMounted) return;
+      setMessages((prev) => mergeMessages(prev, nextMessages));
     });
 
     return () => {
-      unsubscribe?.();
+      isMounted = false;
+      unsubscribe();
     };
   }, [chatId]);
 
@@ -42,15 +65,25 @@ export const useConversationViewModel = (chatId: string) => {
 
   const sendText = async () => {
     if (!canSend) return;
-    const created = await sendMessageUseCase(chatId, input.trim());
-    setMessages((prev) => [...prev, created]);
-    setInput('');
+    setError(null);
+    try {
+      const created = await sendMessageUseCase(chatId, input.trim());
+      setMessages((prev) => mergeMessages(prev, [created]));
+      setInput('');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'No fue posible enviar el mensaje.');
+    }
   };
 
   const sendTemplateMessage = async (text: string) => {
-    const created = await sendMessageUseCase(chatId, text);
-    setMessages((prev) => [...prev, created]);
+    setError(null);
+    try {
+      const created = await sendMessageUseCase(chatId, text);
+      setMessages((prev) => mergeMessages(prev, [created]));
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'No fue posible enviar el mensaje.');
+    }
   };
 
-  return { messages, input, setInput, canSend, sendText, sendTemplateMessage };
+  return { messages, input, setInput, canSend, sendText, sendTemplateMessage, error };
 };

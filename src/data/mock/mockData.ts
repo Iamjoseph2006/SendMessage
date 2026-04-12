@@ -19,7 +19,7 @@ export const chatSummaries: ChatSummary[] = [
   },
   {
     id: 'c3',
-    name: 'Carlos',
+    name: 'Estiven',
     avatarColor: '#FFE8CF',
     lastMessage: '¿Nos vemos mañana?',
     time: 'Ayer',
@@ -43,14 +43,14 @@ export const chatMessagesByChatId: Record<string, Message[]> = {
 
 export const callLogs: CallLog[] = [
   { id: 'cl1', name: 'María López', time: 'Hoy, 11:05', type: 'incoming' },
-  { id: 'cl2', name: 'Carlos', time: 'Hoy, 09:32', type: 'missed' },
+  { id: 'cl2', name: 'Estiven', time: 'Hoy, 09:32', type: 'missed' },
   { id: 'cl3', name: 'Equipo Diseño', time: 'Ayer, 18:40', type: 'outgoing' },
 ];
 
 export const statusItems: StatusItem[] = [
   { id: 's1', name: 'María López', time: 'Hace 5 min', viewed: false },
   { id: 's2', name: 'Ana', time: 'Hace 20 min', viewed: false },
-  { id: 's3', name: 'Carlos', time: 'Hoy, 08:14', viewed: true },
+  { id: 's3', name: 'Estiven', time: 'Hoy, 08:14', viewed: true },
 ];
 
 export const profileData: Profile = {
