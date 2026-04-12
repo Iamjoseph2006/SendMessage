@@ -48,6 +48,9 @@ export const firebaseConfigError = isFirebaseConfigured
   ? null
   : `Configura las variables EXPO_PUBLIC_FIREBASE_* (faltan: ${missingKeys.join(', ')}).`;
 
+export const isFirebaseConfigured = true;
+export const firebaseConfigError = null;
+
 export const firestoreBaseUrl = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents`;
 export const authBaseUrl = 'https://identitytoolkit.googleapis.com/v1';
 
