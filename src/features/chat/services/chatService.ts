@@ -1,131 +1,163 @@
-import { createDoc, FirestoreValue, getCollectionDocs, onSnapshot, patchDoc } from '@/src/config/firestoreClient';
-import { getCurrentUser } from '@/src/features/auth/services/authService';
+import {
+  Timestamp,
+  addDoc,
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  setDoc,
+  where,
+} from 'firebase/firestore';
+import { db } from '@/src/config/firebase';
 
 export type Chat = {
   id: string;
   participants: string[];
-  createdAt?: string;
-  updatedAt?: string;
-  lastMessage?: string;
+  createdAt?: Timestamp | null;
 };
 
 export type ChatMessage = {
   id: string;
   chatId: string;
-  senderId: string;
   text: string;
-  type: 'text';
-  createdAt?: string;
+  senderId: string;
+  createdAt?: Timestamp | null;
 };
 
-const parseString = (fields: Record<string, any>, key: string) => fields?.[key]?.stringValue ?? '';
-const parseDocId = (docName: string) => docName.split('/').pop() ?? '';
-const parseArrayStrings = (fields: Record<string, any>, key: string) =>
-  (fields?.[key]?.arrayValue?.values ?? []).map((value: { stringValue?: string }) => value.stringValue ?? '');
+const requireDb = () => {
+  if (!db) {
+    throw new Error('Firestore no está configurado correctamente.');
+  }
 
-const asStringField = (value: string): FirestoreValue => ({ stringValue: value });
-
-const getUserToken = () => {
-  const user = getCurrentUser();
-  if (!user?.idToken) throw new Error('No hay sesión activa.');
-  return user.idToken;
+  return db;
 };
 
-const getNow = () => new Date().toISOString();
+const buildChatId = (uid1: string, uid2: string) => [uid1, uid2].sort().join('_');
 
-const buildChatId = (userId1: string, userId2: string) => [userId1, userId2].sort().join('_');
+export const createOrGetChat = async (uid1: string, uid2: string): Promise<string> => {
+  const firestore = requireDb();
+  const chatId = buildChatId(uid1, uid2);
+  const chatRef = doc(firestore, 'chats', chatId);
+  const existing = await getDoc(chatRef);
 
-export const createChat = async (userId1: string, userId2: string): Promise<string> => {
-  const token = getUserToken();
-  const chatId = buildChatId(userId1, userId2);
-
-  const existing = await getCollectionDocs('chats', token);
-  const alreadyExists = existing.some((doc: any) => parseDocId(doc.name) === chatId);
-
-  if (!alreadyExists) {
-    await createDoc(
-      'chats',
-      {
-        participants: {
-          arrayValue: {
-            values: [{ stringValue: userId1 }, { stringValue: userId2 }],
-          },
-        },
-        createdAt: asStringField(getNow()),
-        updatedAt: asStringField(getNow()),
-        lastMessage: asStringField(''),
-      },
-      token,
-      chatId,
-    );
+  if (!existing.exists()) {
+    await setDoc(chatRef, {
+      participants: [uid1, uid2],
+      createdAt: serverTimestamp(),
+    });
   }
 
   return chatId;
 };
 
-export const getUserChats = async (userId: string): Promise<Chat[]> => {
-  const token = getUserToken();
-  const docs = await getCollectionDocs('chats', token);
+export const getChatById = async (chatId: string): Promise<Chat | null> => {
+  const firestore = requireDb();
+  const snapshot = await getDoc(doc(firestore, 'chats', chatId));
 
-  return docs
-    .map((doc: any) => ({
-      id: parseDocId(doc.name),
-      participants: parseArrayStrings(doc.fields, 'participants'),
-      createdAt: parseString(doc.fields, 'createdAt'),
-      updatedAt: parseString(doc.fields, 'updatedAt'),
-      lastMessage: parseString(doc.fields, 'lastMessage'),
-    }))
-    .filter((chat: Chat) => chat.participants.includes(userId))
-    .sort((a: Chat, b: Chat) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''));
+  if (!snapshot.exists()) {
+    return null;
+  }
+
+  const data = snapshot.data();
+  return {
+    id: snapshot.id,
+    participants: (data.participants ?? []) as string[],
+    createdAt: (data.createdAt as Timestamp | undefined) ?? null,
+  };
 };
 
-export const listenUserChats = (userId: string, callback: (chats: Chat[]) => void) =>
-  onSnapshot(() => getUserChats(userId), callback, { intervalMs: 1800 });
+export const getUserChats = async (uid: string): Promise<Chat[]> => {
+  const firestore = requireDb();
+  const chatsQuery = query(collection(firestore, 'chats'), where('participants', 'array-contains', uid));
+  const snapshot = await getDocs(chatsQuery);
+
+  return snapshot.docs
+    .map((docSnapshot) => {
+      const data = docSnapshot.data();
+      return {
+        id: docSnapshot.id,
+        participants: (data.participants ?? []) as string[],
+        createdAt: (data.createdAt as Timestamp | undefined) ?? null,
+      } as Chat;
+    })
+    .sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
+};
+
+export const listenUserChats = (uid: string, callback: (chats: Chat[]) => void, onError?: (error: Error) => void) => {
+  const firestore = requireDb();
+  const chatsQuery = query(collection(firestore, 'chats'), where('participants', 'array-contains', uid));
+
+  return onSnapshot(
+    chatsQuery,
+    (snapshot) => {
+      const chats = snapshot.docs
+        .map((docSnapshot) => {
+          const data = docSnapshot.data();
+          return {
+            id: docSnapshot.id,
+            participants: (data.participants ?? []) as string[],
+            createdAt: (data.createdAt as Timestamp | undefined) ?? null,
+          } as Chat;
+        })
+        .sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
+
+      callback(chats);
+    },
+    (error) => onError?.(error as Error),
+  );
+};
 
 export const sendMessage = async (chatId: string, text: string, senderId: string): Promise<string> => {
-  const token = getUserToken();
-  const normalized = text.trim();
-  if (!normalized) throw new Error('El mensaje no puede estar vacío.');
+  const firestore = requireDb();
+  const normalizedText = text.trim();
 
-  const createdAt = getNow();
-  const created = await createDoc(
-    `chats/${chatId}/messages`,
-    {
-      senderId: asStringField(senderId),
-      text: asStringField(normalized),
-      type: asStringField('text'),
-      createdAt: asStringField(createdAt),
-    },
-    token,
-  );
+  if (!normalizedText) {
+    throw new Error('El mensaje no puede estar vacío.');
+  }
 
-  await patchDoc(
-    `chats/${chatId}`,
-    {
-      updatedAt: asStringField(createdAt),
-      lastMessage: asStringField(normalized),
-    },
-    token,
-  );
+  const created = await addDoc(collection(firestore, 'messages'), {
+    chatId,
+    text: normalizedText,
+    senderId,
+    createdAt: Timestamp.now(),
+  });
 
-  return parseDocId(created.name);
+  return created.id;
 };
 
-export const fetchMessages = async (chatId: string): Promise<ChatMessage[]> => {
-  const token = getUserToken();
-  const docs = await getCollectionDocs(`chats/${chatId}/messages`, token);
+export const listenMessages = (
+  chatId: string,
+  callback: (messages: ChatMessage[]) => void,
+  onError?: (error: Error) => void,
+) => {
+  const firestore = requireDb();
+  const messagesQuery = query(
+    collection(firestore, 'messages'),
+    where('chatId', '==', chatId),
+    orderBy('createdAt', 'asc'),
+  );
 
-  return docs
-    .map((doc: any) => ({
-      id: parseDocId(doc.name),
-      chatId,
-      senderId: parseString(doc.fields, 'senderId'),
-      text: parseString(doc.fields, 'text'),
-      type: 'text' as const,
-      createdAt: parseString(doc.fields, 'createdAt'),
-    }))
-    .sort((a: ChatMessage, b: ChatMessage) => (a.createdAt ?? '').localeCompare(b.createdAt ?? ''));
+  return onSnapshot(
+    messagesQuery,
+    (snapshot) => {
+      const messages = snapshot.docs.map((docSnapshot) => {
+        const data = docSnapshot.data();
+
+        return {
+          id: docSnapshot.id,
+          chatId: data.chatId as string,
+          text: data.text as string,
+          senderId: data.senderId as string,
+          createdAt: (data.createdAt as Timestamp | undefined) ?? null,
+        } as ChatMessage;
+      });
+
+      callback(messages);
+    },
+    (error) => onError?.(error as Error),
+  );
 };
-
-export const listenMessages = (chatId: string, callback: (messages: ChatMessage[]) => void) =>
-  onSnapshot(() => fetchMessages(chatId), callback, { intervalMs: 1200 });

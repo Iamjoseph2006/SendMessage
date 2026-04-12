@@ -1,68 +1,144 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
-import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChatSummary } from '@/src/domain/entities';
-import { useChatsViewModel } from '@/src/presentation/viewmodels/useChatsViewModel';
+import { useAuth } from '@/src/features/auth/hooks/useAuth';
+import { Chat, createOrGetChat } from '@/src/features/chat/services/chatService';
+import { useUserChats } from '@/src/features/chat/hooks/useUserChats';
+import { UserProfile, getUsers } from '@/src/features/users/services/userService';
 import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
 
 export default function ChatsScreen() {
-  const { chats } = useChatsViewModel();
+  const { user } = useAuth();
+  const { chats, loading } = useUserChats(user?.uid ?? null);
   const { isDark } = useAppTheme();
   const palette = isDark ? darkPalette : lightPalette;
   const router = useRouter();
-  const [previewChat, setPreviewChat] = useState<ChatSummary | null>(null);
-
   const insets = useSafeAreaInsets();
+
+  const [directory, setDirectory] = useState<UserProfile[]>([]);
+  const [showUsersModal, setShowUsersModal] = useState(false);
+  const [startingChatWith, setStartingChatWith] = useState<string | null>(null);
+  const [screenError, setScreenError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user?.uid) {
+      setDirectory([]);
+      return;
+    }
+
+    getUsers(user.uid)
+      .then(setDirectory)
+      .catch((error) => {
+        setScreenError(error instanceof Error ? error.message : 'No se pudo cargar la lista de usuarios.');
+      });
+  }, [user?.uid]);
+
+  const usersByUid = useMemo(
+    () => new Map(directory.map((directoryUser) => [directoryUser.uid, directoryUser])),
+    [directory],
+  );
+
+  const rows = useMemo(() => {
+    if (!user?.uid) {
+      return [];
+    }
+
+    return chats.map((chat: Chat) => {
+      const contactUid = chat.participants.find((participantId) => participantId !== user.uid) ?? '';
+      const contact = usersByUid.get(contactUid);
+
+      return {
+        id: chat.id,
+        contactUid,
+        title: contact?.name ?? contact?.email ?? 'Usuario',
+        subtitle: contact?.email ?? 'Sin correo disponible',
+      };
+    });
+  }, [chats, user?.uid, usersByUid]);
+
+  const openOrCreateChat = async (contactUid: string) => {
+    if (!user?.uid) {
+      return;
+    }
+
+    setScreenError(null);
+    setStartingChatWith(contactUid);
+
+    try {
+      const chatId = await createOrGetChat(user.uid, contactUid);
+      setShowUsersModal(false);
+      router.push(`/chat/${chatId}`);
+    } catch (error) {
+      setScreenError(error instanceof Error ? error.message : 'No fue posible crear la conversación.');
+    } finally {
+      setStartingChatWith(null);
+    }
+  };
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background }]}>
-      <View style={[styles.header, { paddingTop: insets.top + 4 }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 4 }]}> 
         <Text style={[styles.title, { color: palette.textPrimary }]}>Chats</Text>
       </View>
+
+      {loading ? <ActivityIndicator style={styles.loading} size="large" /> : null}
+
+      {screenError ? <Text style={styles.error}>{screenError}</Text> : null}
+
       <FlatList
-        data={chats}
+        data={rows}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.content}
+        ListEmptyComponent={
+          !loading ? <Text style={[styles.empty, { color: palette.textSecondary }]}>Aún no tienes chats activos.</Text> : null
+        }
         renderItem={({ item }) => (
-          <Pressable
-            style={styles.chatRow}
-            onPress={() => router.push(`/chat/${item.id}`)}
-            onLongPress={() => setPreviewChat(item)}
-            delayLongPress={180}>
-            <View style={[styles.avatar, { backgroundColor: item.avatarColor }]}>
-              <Text style={styles.avatarText}>{item.name.charAt(0)}</Text>
+          <Pressable style={styles.chatRow} onPress={() => router.push(`/chat/${item.id}`)}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{item.title.charAt(0).toUpperCase()}</Text>
             </View>
-
             <View style={styles.textWrap}>
-              <Text style={[styles.name, { color: palette.textPrimary }]}>{item.name}</Text>
+              <Text style={[styles.name, { color: palette.textPrimary }]}>{item.title}</Text>
               <Text numberOfLines={1} style={[styles.lastMessage, { color: palette.textSecondary }]}>
-                {item.lastMessage}
+                {item.subtitle}
               </Text>
-            </View>
-
-            <View style={styles.rightColumn}>
-              <Text style={[styles.time, { color: palette.textSecondary }]}>{item.time}</Text>
-              {item.unreadCount > 0 ? (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{item.unreadCount}</Text>
-                </View>
-              ) : (
-                <Ionicons name="checkmark-done" size={18} color="#A0AEC0" />
-              )}
             </View>
           </Pressable>
         )}
       />
 
-      <Modal visible={!!previewChat} transparent animationType="fade" onRequestClose={() => setPreviewChat(null)}>
-        <Pressable style={styles.previewBackdrop} onPress={() => setPreviewChat(null)}>
-          <View style={[styles.previewCard, { backgroundColor: palette.surface }]}>
-            <Text style={[styles.previewName, { color: palette.textPrimary }]}>{previewChat?.name}</Text>
-            <Text style={[styles.previewText, { color: palette.textSecondary }]}>{previewChat?.lastMessage}</Text>
-            <Text style={[styles.previewHint, { color: palette.textSecondary }]}>Desliza para abrir chat</Text>
-          </View>
+      <Pressable style={styles.fab} onPress={() => setShowUsersModal(true)}>
+        <Ionicons name="chatbubble-ellipses" size={22} color="#FFF" />
+      </Pressable>
+
+      <Modal visible={showUsersModal} transparent animationType="slide" onRequestClose={() => setShowUsersModal(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setShowUsersModal(false)}>
+          <Pressable style={[styles.modalCard, { backgroundColor: palette.surface }]} onPress={() => undefined}>
+            <Text style={[styles.modalTitle, { color: palette.textPrimary }]}>Iniciar nuevo chat</Text>
+
+            <FlatList
+              data={directory}
+              keyExtractor={(item) => item.uid}
+              ListEmptyComponent={<Text style={[styles.empty, { color: palette.textSecondary }]}>No hay usuarios disponibles.</Text>}
+              renderItem={({ item }) => (
+                <Pressable
+                  style={styles.userRow}
+                  disabled={startingChatWith === item.uid}
+                  onPress={() => openOrCreateChat(item.uid)}>
+                  <View style={styles.avatarSmall}>
+                    <Text style={styles.avatarText}>{item.name.charAt(0).toUpperCase()}</Text>
+                  </View>
+                  <View style={styles.textWrap}>
+                    <Text style={[styles.name, { color: palette.textPrimary }]}>{item.name}</Text>
+                    <Text style={[styles.lastMessage, { color: palette.textSecondary }]}>{item.email}</Text>
+                  </View>
+                  {startingChatWith === item.uid ? <ActivityIndicator size="small" /> : null}
+                </Pressable>
+              )}
+            />
+          </Pressable>
         </Pressable>
       </Modal>
     </SafeAreaView>
@@ -70,10 +146,11 @@ export default function ChatsScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#FFFFFF' },
-  header: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 },
-  title: { fontSize: 34, fontWeight: '800', color: '#1A2B44' },
-  content: { paddingVertical: 8 },
+  safeArea: { flex: 1 },
+  header: { paddingHorizontal: 16, paddingBottom: 8 },
+  title: { fontSize: 34, fontWeight: '800' },
+  loading: { marginVertical: 16 },
+  content: { paddingVertical: 8, paddingBottom: 110 },
   chatRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -81,37 +158,58 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
-  avatar: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontWeight: '700', fontSize: 19, color: '#234' },
+  userRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 10,
+  },
+  avatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#BFD7F7',
+  },
+  avatarSmall: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#BFD7F7',
+  },
+  avatarText: { fontWeight: '700', fontSize: 18, color: '#234' },
   textWrap: { flex: 1, gap: 2 },
-  name: { fontSize: 17, fontWeight: '700', color: '#22354D' },
-  lastMessage: { fontSize: 14, color: '#6A7D95' },
-  rightColumn: { alignItems: 'flex-end', gap: 6 },
-  time: { fontSize: 12, color: '#6A7D95' },
-  badge: {
-    minWidth: 22,
-    height: 22,
-    borderRadius: 11,
+  name: { fontSize: 16, fontWeight: '700' },
+  lastMessage: { fontSize: 13 },
+  fab: {
+    position: 'absolute',
+    right: 22,
+    bottom: 28,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
     backgroundColor: '#1F7AE0',
     alignItems: 'center',
     justifyContent: 'center',
+    elevation: 3,
   },
-  badgeText: { color: '#FFFFFF', fontWeight: '700', fontSize: 12 },
-  previewBackdrop: {
+  modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(20,35,54,0.35)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 30,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.28)',
   },
-  previewCard: {
-    width: '100%',
-    backgroundColor: '#FFF',
-    borderRadius: 18,
-    padding: 16,
-    gap: 8,
+  modalCard: {
+    maxHeight: '70%',
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 26,
   },
-  previewName: { fontSize: 17, fontWeight: '700', color: '#22354D' },
-  previewText: { fontSize: 14, color: '#4D627D' },
-  previewHint: { fontSize: 12, color: '#7E8FA5' },
+  modalTitle: { fontSize: 20, fontWeight: '700', marginBottom: 14 },
+  error: { color: '#D93025', marginHorizontal: 16, marginBottom: 8 },
+  empty: { textAlign: 'center', marginTop: 24 },
 });
