@@ -15,19 +15,20 @@ const requireFeature = <T extends (...args: any[]) => any>(featureName: string, 
 };
 
 export const signUpUseCase = (name: string, email: string, password: string) =>
-  requireFeature('signUp', repository.signUp)(name, email, password);
-export const signInUseCase = (email: string, password: string) => requireFeature('signIn', repository.signIn)(email, password);
-export const signOutUseCase = () => requireFeature('signOut', repository.signOut)();
+  requireFeature('signUp', repository.signUp?.bind(repository))(name, email, password);
+export const signInUseCase = (email: string, password: string) =>
+  requireFeature('signIn', repository.signIn?.bind(repository))(email, password);
+export const signOutUseCase = () => requireFeature('signOut', repository.signOut?.bind(repository))();
 export const getCurrentSessionUseCase = () =>
-  requireFeature('getCurrentSession', repository.getCurrentSession)();
+  requireFeature('getCurrentSession', repository.getCurrentSession?.bind(repository))();
 
 export const getChatsUseCase = () => repository.getChats();
 export const getMessagesUseCase = (chatId: string) => repository.getMessages(chatId);
 export const listenMessagesUseCase = (chatId: string, onUpdate: (messages: Message[]) => void) =>
-  requireFeature('listenMessages', repository.listenMessages)(chatId, onUpdate);
+  requireFeature('listenMessages', repository.listenMessages?.bind(repository))(chatId, onUpdate);
 export const sendMessageUseCase = (chatId: string, text: string) => repository.sendMessage(chatId, text);
 export const sendImageMessageUseCase = (chatId: string, localUri: string) =>
-  requireFeature('sendImageMessage', repository.sendImageMessage)(chatId, localUri);
+  requireFeature('sendImageMessage', repository.sendImageMessage?.bind(repository))(chatId, localUri);
 
 export const getCallsUseCase = () => repository.getCalls();
 export const getStatusesUseCase = () => repository.getStatuses();

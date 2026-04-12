@@ -1,8 +1,9 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState } from 'react';
-import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCallsViewModel } from '@/src/presentation/viewmodels/useCallsViewModel';
+import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
 
 const callTypeLabel = {
   incoming: 'Entrante',
@@ -12,6 +13,8 @@ const callTypeLabel = {
 
 export default function CallsScreen() {
   const { calls } = useCallsViewModel();
+  const { isDark } = useAppTheme();
+  const palette = isDark ? darkPalette : lightPalette;
   const [activeCall, setActiveCall] = useState<string | null>(null);
   const [callMode, setCallMode] = useState<'audio' | 'video'>('audio');
 
@@ -23,28 +26,28 @@ export default function CallsScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background }]}>
       <View style={[styles.header, { paddingTop: insets.top + 4 }]}>
-        <Text style={styles.headerTitle}>Llamadas</Text>
+        <Text style={[styles.headerTitle, { color: palette.textPrimary }]}>Llamadas</Text>
       </View>
       <View style={styles.container}>
         {calls.map((call) => (
-          <View style={styles.row} key={call.id}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{call.name.charAt(0)}</Text>
+          <View style={[styles.row, { backgroundColor: palette.surface, borderColor: palette.border }]} key={call.id}>
+            <View style={[styles.avatar, { backgroundColor: isDark ? '#20314A' : '#E8F1FF' }]}>
+              <Text style={[styles.avatarText, { color: palette.textPrimary }]}>{call.name.charAt(0)}</Text>
             </View>
             <View style={styles.dataWrap}>
-              <Text style={styles.name}>{call.name}</Text>
-              <Text style={styles.meta}>
+              <Text style={[styles.name, { color: palette.textPrimary }]}>{call.name}</Text>
+              <Text style={[styles.meta, { color: palette.textSecondary }]}>
                 {callTypeLabel[call.type]} · {call.time}
               </Text>
             </View>
             <View style={styles.actions}>
-              <Pressable style={styles.iconAction} onPress={() => triggerCall(call.name, 'audio')}>
-                <Ionicons name="call" size={18} color="#1F7AE0" />
+              <Pressable style={[styles.iconAction, { backgroundColor: isDark ? '#21314A' : '#ECF4FF' }]} onPress={() => triggerCall(call.name, 'audio')}>
+                <Ionicons name="call" size={18} color={palette.accent} />
               </Pressable>
-              <Pressable style={styles.iconAction} onPress={() => triggerCall(call.name, 'video')}>
-                <Ionicons name="videocam" size={20} color="#1F7AE0" />
+              <Pressable style={[styles.iconAction, { backgroundColor: isDark ? '#21314A' : '#ECF4FF' }]} onPress={() => triggerCall(call.name, 'video')}>
+                <Ionicons name="videocam" size={20} color={palette.accent} />
               </Pressable>
             </View>
           </View>

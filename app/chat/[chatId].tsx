@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useLocalSearchParams } from 'expo-router';
 import { useMemo, useRef, useState } from 'react';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ActionSheetIOS,
   Animated,
@@ -11,7 +11,6 @@ import {
   Modal,
   Platform,
   Pressable,
-  SafeAreaView,
   StyleSheet,
   Text,
   TextInput,
@@ -19,6 +18,7 @@ import {
 } from 'react-native';
 import { chatSummaries } from '@/src/data/mock/mockData';
 import { Message } from '@/src/domain/entities';
+import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
 import { useConversationViewModel } from '@/src/presentation/viewmodels/useConversationViewModel';
 
 const statusIcon = (status: Message['status']) => {
@@ -47,6 +47,8 @@ const formatTime = () => {
 
 export default function ConversationScreen() {
   const { chatId } = useLocalSearchParams<{ chatId: string }>();
+  const { isDark } = useAppTheme();
+  const palette = isDark ? darkPalette : lightPalette;
   const { messages, input, setInput, canSend, sendText, sendTemplateMessage } =
     useConversationViewModel(chatId);
 
@@ -177,12 +179,12 @@ export default function ConversationScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background }]}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.safeArea}>
-        <View style={[styles.header, { paddingTop: insets.top + 4 }]}>
+        <View style={[styles.header, { paddingTop: insets.top + 4, borderBottomColor: palette.border, backgroundColor: palette.surface }]}>
           <View>
-            <Text style={styles.headerName}>{chatName}</Text>
-            <Text style={styles.headerSubtitle}>En línea</Text>
+            <Text style={[styles.headerName, { color: palette.textPrimary }]}>{chatName}</Text>
+            <Text style={[styles.headerSubtitle, { color: palette.textSecondary }]}>En línea</Text>
           </View>
           <View style={styles.headerActions}>
             <Pressable style={styles.headerActionButton}>
@@ -195,7 +197,7 @@ export default function ConversationScreen() {
         </View>
 
         <FlatList
-          style={styles.list}
+          style={[styles.list, { backgroundColor: isDark ? '#0F1724' : '#F8FBFF' }]}
           contentContainerStyle={styles.listContent}
           data={messages}
           keyExtractor={(item) => item.id}
@@ -220,8 +222,16 @@ export default function ConversationScreen() {
                     ))}
                   </View>
                 ) : null}
-                <View style={[styles.bubble, item.sender === 'me' ? styles.me : styles.contact, selected && styles.selectedBubble]}>
-                  <Text style={[styles.bubbleText, item.sender === 'me' && styles.meText]}>{item.text}</Text>
+                <View
+                  style={[
+                    styles.bubble,
+                    item.sender === 'me' ? styles.me : styles.contact,
+                    selected && styles.selectedBubble,
+                    item.sender === 'contact' && isDark && { backgroundColor: '#18263A', borderColor: '#2D4363' },
+                  ]}>
+                  <Text style={[styles.bubbleText, item.sender === 'me' && styles.meText, isDark && item.sender === 'contact' && { color: '#E9F0FA' }]}>
+                    {item.text}
+                  </Text>
                   <View style={styles.rowMeta}>
                     {reaction ? <Text style={styles.reactionTag}>{reaction}</Text> : null}
                     <Text style={styles.time}>{item.time}</Text>
@@ -244,7 +254,7 @@ export default function ConversationScreen() {
           </View>
         ) : null}
 
-        <View style={styles.composer}>
+        <View style={[styles.composer, { borderTopColor: palette.border, backgroundColor: palette.surface }]}>
           <Pressable style={styles.smallButton} onPress={() => setShowAttach((prev) => !prev)}>
             <Ionicons name="attach" size={19} color="#1F7AE0" />
           </Pressable>
@@ -258,7 +268,7 @@ export default function ConversationScreen() {
           </Pressable>
           <TextInput
             ref={inputRef}
-            style={styles.input}
+            style={[styles.input, { borderColor: palette.border, backgroundColor: palette.surface, color: palette.textPrimary }]}
             placeholder="Mensaje"
             placeholderTextColor="#8C9DB0"
             value={input}
