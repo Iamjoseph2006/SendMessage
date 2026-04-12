@@ -1,49 +1,94 @@
-import { authBaseUrl, firebaseConfig } from '@/src/config/firebase';
+/* eslint-disable import/no-unresolved */
+import {
+  User,
+  createUserWithEmailAndPassword,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut,
+} from 'firebase/auth';
+import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { auth, db } from '@/src/config/firebase';
 
 export type AppUser = {
   uid: string;
   email: string;
   idToken: string;
-  refreshToken: string;
+  displayName?: string;
 };
 
 let currentUser: AppUser | null = null;
 const listeners = new Set<(user: AppUser | null) => void>();
 
+const mapFirebaseUser = async (user: User | null): Promise<AppUser | null> => {
+  if (!user?.email) {
+    return null;
+  }
+
+  const idToken = await user.getIdToken();
+
+  return {
+    uid: user.uid,
+    email: user.email,
+    idToken,
+    displayName: user.displayName ?? undefined,
+  };
+};
+
 const notify = () => {
   listeners.forEach((callback) => callback(currentUser));
 };
 
-const authRequest = async (endpoint: 'accounts:signUp' | 'accounts:signInWithPassword', email: string, password: string) => {
-  const response = await fetch(`${authBaseUrl}/${endpoint}?key=${firebaseConfig.apiKey}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: email.trim(), password, returnSecureToken: true }),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(error || 'Error de autenticación.');
+const normalizeAuthError = (error: unknown): Error => {
+  if (error instanceof Error && error.message) {
+    return error;
   }
 
-  const payload = await response.json();
-  currentUser = {
-    uid: payload.localId,
-    email: payload.email,
-    idToken: payload.idToken,
-    refreshToken: payload.refreshToken,
-  };
-  notify();
-  return currentUser;
+  return new Error('No fue posible completar la autenticación.');
 };
 
-export const registerUser = async (email: string, password: string): Promise<AppUser> =>
-  authRequest('accounts:signUp', email, password);
+export const registerUser = async (name: string, email: string, password: string): Promise<AppUser> => {
+  try {
+    const credentials = await createUserWithEmailAndPassword(auth, email.trim(), password);
 
-export const loginUser = async (email: string, password: string): Promise<AppUser> =>
-  authRequest('accounts:signInWithPassword', email, password);
+    await setDoc(doc(db, 'users', credentials.user.uid), {
+      uid: credentials.user.uid,
+      name: name.trim(),
+      email: credentials.user.email,
+      createdAt: serverTimestamp(),
+    });
+
+    const mappedUser = await mapFirebaseUser(credentials.user);
+    if (!mappedUser) {
+      throw new Error('No fue posible crear la sesión del usuario.');
+    }
+
+    currentUser = mappedUser;
+    notify();
+    return mappedUser;
+  } catch (error) {
+    throw normalizeAuthError(error);
+  }
+};
+
+export const loginUser = async (email: string, password: string): Promise<AppUser> => {
+  try {
+    const credentials = await signInWithEmailAndPassword(auth, email.trim(), password);
+    const mappedUser = await mapFirebaseUser(credentials.user);
+
+    if (!mappedUser) {
+      throw new Error('No fue posible iniciar sesión con este usuario.');
+    }
+
+    currentUser = mappedUser;
+    notify();
+    return mappedUser;
+  } catch (error) {
+    throw normalizeAuthError(error);
+  }
+};
 
 export const logoutUser = async (): Promise<void> => {
+  await signOut(auth);
   currentUser = null;
   notify();
 };
@@ -52,9 +97,18 @@ export const getCurrentUser = (): AppUser | null => currentUser;
 
 export const observeAuthState = (callback: (user: AppUser | null) => void) => {
   listeners.add(callback);
+
+  const unsubscribeFirebase = onAuthStateChanged(auth, async (firebaseUser) => {
+    currentUser = await mapFirebaseUser(firebaseUser);
+    notify();
+  });
+
   callback(currentUser);
 
   return () => {
     listeners.delete(callback);
+    if (listeners.size === 0) {
+      unsubscribeFirebase();
+    }
   };
 };
