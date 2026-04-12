@@ -35,9 +35,18 @@ const firebaseConfig = {
   messagingSenderId: getOptionalEnv('EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID'),
 };
 
-const app: FirebaseApp = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-const auth: Auth = getAuth(app);
-const db: Firestore = getFirestore(app);
+const app: FirebaseApp | null = isFirebaseConfigured
+  ? getApps().length > 0
+    ? getApp()
+    : initializeApp(firebaseConfig)
+  : null;
+
+const auth: Auth | null = app ? getAuth(app) : null;
+const db: Firestore | null = app ? getFirestore(app) : null;
+
+export const firebaseConfigError = isFirebaseConfigured
+  ? null
+  : `Configura las variables EXPO_PUBLIC_FIREBASE_* (faltan: ${missingKeys.join(', ')}).`;
 
 export const firestoreBaseUrl = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents`;
 export const authBaseUrl = 'https://identitytoolkit.googleapis.com/v1';
