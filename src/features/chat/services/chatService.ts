@@ -20,11 +20,14 @@ export type Chat = {
   createdAt?: Timestamp | null;
 };
 
+export type ChatMessageType = 'text' | 'image' | 'audio' | 'location';
+
 export type ChatMessage = {
   id: string;
   chatId: string;
   text: string;
   senderId: string;
+  type: ChatMessageType;
   createdAt?: Timestamp | null;
 };
 
@@ -38,21 +41,28 @@ const requireDb = () => {
 
 const buildChatId = (uid1: string, uid2: string) => [uid1, uid2].sort().join('_');
 
-export const createOrGetChat = async (uid1: string, uid2: string): Promise<string> => {
+export const createChat = async (userId1: string, userId2: string): Promise<string> => {
+  if (!userId1 || !userId2) {
+    throw new Error('Se requieren ambos usuarios para crear un chat.');
+  }
+
   const firestore = requireDb();
-  const chatId = buildChatId(uid1, uid2);
+  const chatId = buildChatId(userId1, userId2);
   const chatRef = doc(firestore, 'chats', chatId);
   const existing = await getDoc(chatRef);
 
   if (!existing.exists()) {
     await setDoc(chatRef, {
-      participants: [uid1, uid2],
+      id: chatId,
+      participants: [userId1, userId2],
       createdAt: serverTimestamp(),
     });
   }
 
   return chatId;
 };
+
+export const createOrGetChat = createChat;
 
 export const getChatById = async (chatId: string): Promise<Chat | null> => {
   const firestore = requireDb();
@@ -111,7 +121,12 @@ export const listenUserChats = (uid: string, callback: (chats: Chat[]) => void, 
   );
 };
 
-export const sendMessage = async (chatId: string, text: string, senderId: string): Promise<string> => {
+export const sendMessage = async (
+  chatId: string,
+  text: string,
+  senderId: string,
+  type: ChatMessageType = 'text',
+): Promise<string> => {
   const firestore = requireDb();
   const normalizedText = text.trim();
 
@@ -123,7 +138,8 @@ export const sendMessage = async (chatId: string, text: string, senderId: string
     chatId,
     text: normalizedText,
     senderId,
-    createdAt: Timestamp.now(),
+    type,
+    createdAt: serverTimestamp(),
   });
 
   return created.id;
@@ -135,11 +151,7 @@ export const listenMessages = (
   onError?: (error: Error) => void,
 ) => {
   const firestore = requireDb();
-  const messagesQuery = query(
-    collection(firestore, 'messages'),
-    where('chatId', '==', chatId),
-    orderBy('createdAt', 'asc'),
-  );
+  const messagesQuery = query(collection(firestore, 'messages'), where('chatId', '==', chatId), orderBy('createdAt', 'asc'));
 
   return onSnapshot(
     messagesQuery,
@@ -152,6 +164,7 @@ export const listenMessages = (
           chatId: data.chatId as string,
           text: data.text as string,
           senderId: data.senderId as string,
+          type: (data.type as ChatMessageType | undefined) ?? 'text',
           createdAt: (data.createdAt as Timestamp | undefined) ?? null,
         } as ChatMessage;
       });
