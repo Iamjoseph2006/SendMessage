@@ -37,6 +37,9 @@ export default function ProfileScreen() {
       user.uid,
       (nextProfile) => {
         setProfile(nextProfile);
+        if (nextProfile) {
+          console.log('Nombre:', nextProfile.name);
+        }
         setLoading(false);
       },
       (listenError) => {
@@ -64,9 +67,11 @@ export default function ProfileScreen() {
       <View style={styles.container}>
         <View style={[styles.headerCard, { borderColor: palette.border, backgroundColor: palette.surface }]}> 
           <View style={[styles.profilePhoto, { backgroundColor: isDark ? '#21314A' : '#D9EAFF' }]}> 
-            <Text style={[styles.profileInitial, { color: palette.textPrimary }]}>{(profile?.name ?? 'U').charAt(0)}</Text>
+            <Text style={[styles.profileInitial, { color: palette.textPrimary }]}>
+              {(profile?.name || profile?.email || 'U').charAt(0)}
+            </Text>
           </View>
-          <Text style={[styles.name, { color: palette.textPrimary }]}>{profile?.name ?? 'Sin nombre'}</Text>
+          <Text style={[styles.name, { color: palette.textPrimary }]}>{profile?.name || profile?.email || 'Sin nombre'}</Text>
           <Text style={[styles.email, { color: palette.textSecondary }]}>{profile?.email ?? user?.email}</Text>
           {error ? <Text style={styles.error}>{error}</Text> : null}
         </View>

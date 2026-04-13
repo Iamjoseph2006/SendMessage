@@ -6,7 +6,7 @@ import {
   signInWithEmailAndPassword,
   signOut,
 } from 'firebase/auth';
-import { doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { auth, db, firebaseConfigError } from '@/src/config/firebase';
 
 export type AppUser = {
@@ -145,11 +145,24 @@ export const registerUser = async (email: string, password: string, name: string
 export const loginUser = async (email: string, password: string): Promise<AppUser> => {
   try {
     const authClient = getAuthClient();
+    const firestoreClient = getFirestoreClient();
     const credentials = await signInWithEmailAndPassword(authClient, email.trim(), password);
+    const userRef = doc(firestoreClient, 'users', credentials.user.uid);
+    const userSnapshot = await getDoc(userRef);
 
-    await updateDoc(doc(getFirestoreClient(), 'users', credentials.user.uid), {
-      online: true,
-    }).catch(() => undefined);
+    if (!userSnapshot.exists()) {
+      await setDoc(userRef, {
+        uid: credentials.user.uid,
+        email: credentials.user.email,
+        name: credentials.user.displayName?.trim() ?? '',
+        createdAt: serverTimestamp(),
+        online: true,
+      });
+    } else {
+      await updateDoc(userRef, {
+        online: true,
+      }).catch(() => undefined);
+    }
 
     const mappedUser = await mapFirebaseUser(credentials.user);
 

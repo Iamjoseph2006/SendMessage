@@ -19,29 +19,16 @@ const requireDb = () => {
 };
 
 const mapUser = (source: Record<string, unknown>, documentId: string): UserProfile => ({
-  uid: (source.uid as string | undefined) ?? documentId,
+  uid: documentId,
   email: (source.email as string | undefined) ?? '',
-  name: (source.name as string | undefined) ?? 'Sin nombre',
+  name: (source.name as string | undefined) ?? '',
   photoURL: (source.photoURL as string | null | undefined) ?? null,
   online: Boolean(source.online),
   createdAt: (source.createdAt as Timestamp | undefined) ?? null,
 });
 
-export const getUsers = async (excludeUid?: string): Promise<UserProfile[]> => {
-  const firestore = requireDb();
-  const snapshot = await getDocs(collection(firestore, 'users'));
-
-  const users = snapshot.docs
-    .map((docSnapshot) => mapUser(docSnapshot.data(), docSnapshot.id))
-    .filter((user) => Boolean(user.uid) && user.uid !== excludeUid)
-    .sort((a, b) => a.name.localeCompare(b.name));
-
-  console.log('[users/getUsers] Usuarios obtenidos', users);
-  return users;
-};
-
-export const listenUsers = (
-  excludeUid: string | undefined,
+export const getUsers = (
+  currentUserUid: string | undefined,
   callback: (users: UserProfile[]) => void,
   onError?: (error: Error) => void,
 ) => {
@@ -53,10 +40,10 @@ export const listenUsers = (
     (snapshot) => {
       const users = snapshot.docs
         .map((docSnapshot) => mapUser(docSnapshot.data(), docSnapshot.id))
-        .filter((user) => Boolean(user.uid) && user.uid !== excludeUid)
+        .filter((user) => user.uid !== currentUserUid)
         .sort((a, b) => a.name.localeCompare(b.name));
 
-      console.log('[users/listenUsers] Usuarios en tiempo real', users);
+      console.log('Usuarios Firestore:', users);
       callback(users);
     },
     (error) => onError?.(error as Error),
