@@ -37,6 +37,28 @@ export const getUsers = async (excludeUid?: string): Promise<UserProfile[]> => {
     .sort((a, b) => a.name.localeCompare(b.name));
 };
 
+export const listenUsers = (
+  excludeUid: string | undefined,
+  callback: (users: UserProfile[]) => void,
+  onError?: (error: Error) => void,
+) => {
+  const firestore = requireDb();
+  const usersQuery = query(collection(firestore, 'users'));
+
+  return onSnapshot(
+    usersQuery,
+    (snapshot) => {
+      const users = snapshot.docs
+        .map((docSnapshot) => mapUser(docSnapshot.data()))
+        .filter((user) => Boolean(user.uid) && user.uid !== excludeUid)
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+      callback(users);
+    },
+    (error) => onError?.(error as Error),
+  );
+};
+
 export const getUserById = async (uid: string): Promise<UserProfile | null> => {
   const firestore = requireDb();
   const userSnapshot = await getDoc(doc(firestore, 'users', uid));

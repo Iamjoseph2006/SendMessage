@@ -1,10 +1,10 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/features/auth/hooks/useAuth';
-import { listenProfile, updateProfileName } from '@/src/features/profile/services/profileService';
+import { listenProfile } from '@/src/features/profile/services/profileService';
 import { UserProfile } from '@/src/features/users/services/userService';
 import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
 
@@ -23,8 +23,6 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [name, setName] = useState('');
-  const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,7 +37,6 @@ export default function ProfileScreen() {
       user.uid,
       (nextProfile) => {
         setProfile(nextProfile);
-        setName(nextProfile?.name ?? '');
         setLoading(false);
       },
       (listenError) => {
@@ -50,23 +47,6 @@ export default function ProfileScreen() {
 
     return unsubscribe;
   }, [user?.uid]);
-
-  const onSave = async () => {
-    if (!user?.uid) {
-      return;
-    }
-
-    setError(null);
-    setSaving(true);
-
-    try {
-      await updateProfileName(user.uid, name);
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'No se pudo actualizar el perfil.');
-    } finally {
-      setSaving(false);
-    }
-  };
 
   if (loading) {
     return (
@@ -86,19 +66,8 @@ export default function ProfileScreen() {
           <View style={[styles.profilePhoto, { backgroundColor: isDark ? '#21314A' : '#D9EAFF' }]}> 
             <Text style={[styles.profileInitial, { color: palette.textPrimary }]}>{(profile?.name ?? 'U').charAt(0)}</Text>
           </View>
+          <Text style={[styles.name, { color: palette.textPrimary }]}>{profile?.name ?? 'Sin nombre'}</Text>
           <Text style={[styles.email, { color: palette.textSecondary }]}>{profile?.email ?? user?.email}</Text>
-
-          <TextInput
-            style={[styles.nameInput, { borderColor: palette.border, color: palette.textPrimary }]}
-            value={name}
-            onChangeText={setName}
-            placeholder="Nombre"
-            placeholderTextColor="#8C9DB0"
-          />
-
-          <Pressable style={[styles.saveButton, saving && { opacity: 0.5 }]} onPress={onSave} disabled={saving}>
-            <Text style={styles.saveButtonText}>{saving ? 'Guardando...' : 'Guardar nombre'}</Text>
-          </Pressable>
           {error ? <Text style={styles.error}>{error}</Text> : null}
         </View>
 
@@ -144,22 +113,8 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   profileInitial: { fontSize: 28, fontWeight: '800', color: '#214060' },
+  name: { fontSize: 20, fontWeight: '700' },
   email: { fontSize: 14 },
-  nameInput: {
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    width: '100%',
-  },
-  saveButton: {
-    marginTop: 4,
-    backgroundColor: '#1F7AE0',
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  saveButtonText: { color: '#fff', fontWeight: '700' },
   optionRow: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -1,39 +1,26 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/features/auth/hooks/useAuth';
 import { Chat, createOrGetChat } from '@/src/features/chat/services/chatService';
 import { useUserChats } from '@/src/features/chat/hooks/useUserChats';
-import { UserProfile, getUsers } from '@/src/features/users/services/userService';
+import { useUsersDirectory } from '@/src/features/users/hooks/useUsersDirectory';
 import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
 
 export default function ChatsScreen() {
   const { user } = useAuth();
   const { chats, loading } = useUserChats(user?.uid ?? null);
+  const { users: directory, loading: usersLoading, error: usersError } = useUsersDirectory(user?.uid ?? null);
   const { isDark } = useAppTheme();
   const palette = isDark ? darkPalette : lightPalette;
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  const [directory, setDirectory] = useState<UserProfile[]>([]);
   const [showUsersModal, setShowUsersModal] = useState(false);
   const [startingChatWith, setStartingChatWith] = useState<string | null>(null);
   const [screenError, setScreenError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!user?.uid) {
-      setDirectory([]);
-      return;
-    }
-
-    getUsers(user.uid)
-      .then(setDirectory)
-      .catch((error) => {
-        setScreenError(error instanceof Error ? error.message : 'No se pudo cargar la lista de usuarios.');
-      });
-  }, [user?.uid]);
 
   const usersByUid = useMemo(
     () => new Map(directory.map((directoryUser) => [directoryUser.uid, directoryUser])),
@@ -85,7 +72,7 @@ export default function ChatsScreen() {
 
       {loading ? <ActivityIndicator style={styles.loading} size="large" /> : null}
 
-      {screenError ? <Text style={styles.error}>{screenError}</Text> : null}
+      {screenError || usersError ? <Text style={styles.error}>{screenError ?? usersError}</Text> : null}
 
       <FlatList
         data={rows}
@@ -121,7 +108,13 @@ export default function ChatsScreen() {
             <FlatList
               data={directory}
               keyExtractor={(item) => item.uid}
-              ListEmptyComponent={<Text style={[styles.empty, { color: palette.textSecondary }]}>No hay usuarios disponibles.</Text>}
+              ListEmptyComponent={
+                usersLoading ? (
+                  <ActivityIndicator style={styles.loading} size="small" />
+                ) : (
+                  <Text style={[styles.empty, { color: palette.textSecondary }]}>No hay usuarios disponibles.</Text>
+                )
+              }
               renderItem={({ item }) => (
                 <Pressable
                   style={styles.userRow}
