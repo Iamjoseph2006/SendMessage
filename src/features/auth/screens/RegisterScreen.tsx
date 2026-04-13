@@ -10,13 +10,21 @@ export default function RegisterScreen({ onRegister, error }: RegisterScreenProp
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [localError, setLocalError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async () => {
-    if (!name.trim() || !email.trim() || !password.trim()) {
+    if (!name.trim()) {
+      setLocalError('El nombre es obligatorio.');
       return;
     }
 
+    if (!email.trim() || !password.trim()) {
+      setLocalError('Completa todos los campos.');
+      return;
+    }
+
+    setLocalError(null);
     setSubmitting(true);
     try {
       await onRegister(name, email, password);
@@ -46,6 +54,7 @@ export default function RegisterScreen({ onRegister, error }: RegisterScreenProp
         onChangeText={setPassword}
       />
 
+      {localError ? <Text style={styles.error}>{localError}</Text> : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
       <Pressable style={styles.primaryButton} disabled={submitting} onPress={handleSubmit}>

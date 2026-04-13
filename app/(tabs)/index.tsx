@@ -27,6 +27,11 @@ export default function ChatsScreen() {
     [directory],
   );
 
+  console.log('Usuario actual:', user);
+  directory.forEach((directoryUser) => {
+    console.log('Nombre:', directoryUser.name);
+  });
+
   const rows = useMemo(() => {
     if (!user?.uid) {
       return [];
@@ -39,7 +44,7 @@ export default function ChatsScreen() {
       return {
         id: chat.id,
         contactUid,
-        title: contact?.name ?? contact?.email ?? 'Usuario',
+        title: contact?.name || contact?.email || 'Sin nombre',
         subtitle: contact?.email ?? 'Sin correo disponible',
       };
     });
@@ -124,7 +129,7 @@ export default function ChatsScreen() {
                     <Text style={styles.avatarText}>{item.name.charAt(0).toUpperCase()}</Text>
                   </View>
                   <View style={styles.textWrap}>
-                    <Text style={[styles.name, { color: palette.textPrimary }]}>{item.name}</Text>
+                    <Text style={[styles.name, { color: palette.textPrimary }]}>{item.name || item.email}</Text>
                     <Text style={[styles.lastMessage, { color: palette.textSecondary }]}>{item.email}</Text>
                   </View>
                   {startingChatWith === item.uid ? <ActivityIndicator size="small" /> : null}
