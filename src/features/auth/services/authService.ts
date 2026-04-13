@@ -6,7 +6,7 @@ import {
   signInWithEmailAndPassword,
   signOut,
 } from 'firebase/auth';
-import { doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import { Timestamp, doc, setDoc, updateDoc } from 'firebase/firestore';
 import { auth, db, firebaseConfigError } from '@/src/config/firebase';
 
 export type AppUser = {
@@ -115,7 +115,7 @@ export const registerUser = async (email: string, password: string, name: string
       email: credentials.user.email,
       name: name.trim(),
       photoURL: credentials.user.photoURL ?? null,
-      createdAt: serverTimestamp(),
+      createdAt: Timestamp.now(),
       online: true,
     });
 
