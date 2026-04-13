@@ -6,7 +6,7 @@ import {
   signInWithEmailAndPassword,
   signOut,
 } from 'firebase/auth';
-import { Timestamp, doc, setDoc, updateDoc } from 'firebase/firestore';
+import { doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { auth, db, firebaseConfigError } from '@/src/config/firebase';
 
 export type AppUser = {
@@ -106,6 +106,11 @@ const ensureAuthSubscription = () => {
 
 export const registerUser = async (email: string, password: string, name: string): Promise<AppUser> => {
   try {
+    const normalizedName = name.trim();
+    if (!normalizedName) {
+      throw new Error('El nombre es obligatorio.');
+    }
+
     const authClient = getAuthClient();
     const firestoreClient = getFirestoreClient();
     const credentials = await createUserWithEmailAndPassword(authClient, email.trim(), password);
@@ -113,10 +118,15 @@ export const registerUser = async (email: string, password: string, name: string
     await setDoc(doc(firestoreClient, 'users', credentials.user.uid), {
       uid: credentials.user.uid,
       email: credentials.user.email,
-      name: name.trim(),
-      photoURL: credentials.user.photoURL ?? null,
-      createdAt: Timestamp.now(),
+      name: normalizedName,
+      createdAt: serverTimestamp(),
       online: true,
+    });
+
+    console.log('[auth/registerUser] Usuario guardado en Firestore', {
+      uid: credentials.user.uid,
+      email: credentials.user.email,
+      name: normalizedName,
     });
 
     const mappedUser = await mapFirebaseUser(credentials.user);
@@ -148,6 +158,10 @@ export const loginUser = async (email: string, password: string): Promise<AppUse
     }
 
     currentUser = mappedUser;
+    console.log('[auth/loginUser] Usuario autenticado', {
+      uid: mappedUser.uid,
+      email: mappedUser.email,
+    });
     notify();
     return mappedUser;
   } catch (error) {
