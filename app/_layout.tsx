@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { AuthProvider } from '@/src/features/auth/hooks/useAuth';
 import AuthNavigator from '@/src/navigation/AuthNavigator';
 import { AppThemeProvider, useAppTheme } from '@/src/presentation/theme/appTheme';
 import 'react-native-reanimated';
@@ -29,7 +30,9 @@ export default function RootLayout() {
 
   return (
     <AppThemeProvider>
-      <RootNavigator />
+      <AuthProvider>
+        <RootNavigator />
+      </AuthProvider>
     </AppThemeProvider>
   );
 }

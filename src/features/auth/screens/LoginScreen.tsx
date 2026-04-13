@@ -20,6 +20,8 @@ export default function LoginScreen({ onLogin, onGoToRegister, error }: LoginScr
     setSubmitting(true);
     try {
       await onLogin(email, password);
+    } catch {
+      // El error se maneja desde el hook useAuth y se muestra vía prop `error`.
     } finally {
       setSubmitting(false);
     }
