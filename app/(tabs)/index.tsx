@@ -120,21 +120,25 @@ export default function ChatsScreen() {
                   <Text style={[styles.empty, { color: palette.textSecondary }]}>No hay usuarios disponibles.</Text>
                 )
               }
-              renderItem={({ item }) => (
-                <Pressable
-                  style={styles.userRow}
-                  disabled={startingChatWith === item.uid}
-                  onPress={() => openOrCreateChat(item.uid)}>
-                  <View style={styles.avatarSmall}>
-                    <Text style={styles.avatarText}>{item.name.charAt(0).toUpperCase()}</Text>
-                  </View>
-                  <View style={styles.textWrap}>
-                    <Text style={[styles.name, { color: palette.textPrimary }]}>{item.name || item.email}</Text>
-                    <Text style={[styles.lastMessage, { color: palette.textSecondary }]}>{item.email}</Text>
-                  </View>
-                  {startingChatWith === item.uid ? <ActivityIndicator size="small" /> : null}
-                </Pressable>
-              )}
+              renderItem={({ item }) => {
+                const displayName = item.name || item.email;
+
+                return (
+                  <Pressable
+                    style={styles.userRow}
+                    disabled={startingChatWith === item.uid}
+                    onPress={() => openOrCreateChat(item.uid)}>
+                    <View style={styles.avatarSmall}>
+                      <Text style={styles.avatarText}>{displayName.charAt(0).toUpperCase()}</Text>
+                    </View>
+                    <View style={styles.textWrap}>
+                      <Text style={[styles.name, { color: palette.textPrimary }]}>{displayName}</Text>
+                      <Text style={[styles.lastMessage, { color: palette.textSecondary }]}>{item.email}</Text>
+                    </View>
+                    {startingChatWith === item.uid ? <ActivityIndicator size="small" /> : null}
+                  </Pressable>
+                );
+              }}
             />
           </Pressable>
         </Pressable>

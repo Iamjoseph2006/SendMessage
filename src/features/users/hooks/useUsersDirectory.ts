@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getUsers, UserProfile } from '@/src/features/users/services/userService';
+import { listenUsers, UserProfile } from '@/src/features/users/services/userService';
 
 export const useUsersDirectory = (excludeUid: string | null) => {
   const [users, setUsers] = useState<UserProfile[]>([]);
@@ -17,7 +17,7 @@ export const useUsersDirectory = (excludeUid: string | null) => {
     setLoading(true);
     setError(null);
 
-    const unsubscribe = getUsers(
+    const unsubscribe = listenUsers(
       excludeUid,
       (nextUsers) => {
         setUsers(nextUsers);

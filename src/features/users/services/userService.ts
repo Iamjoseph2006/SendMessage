@@ -27,27 +27,42 @@ const mapUser = (source: Record<string, unknown>, documentId: string): UserProfi
   createdAt: (source.createdAt as Timestamp | undefined) ?? null,
 });
 
-export const getUsers = (
+export const listenUsers = (
   currentUserUid: string | undefined,
   callback: (users: UserProfile[]) => void,
   onError?: (error: Error) => void,
 ) => {
+  if (typeof callback !== 'function') {
+    throw new Error('listenUsers requiere un callback válido.');
+  }
+
   const firestore = requireDb();
-  const usersQuery = query(collection(firestore, 'users'));
+  const usersQuery = collection(firestore, 'users');
 
   return onSnapshot(
     usersQuery,
     (snapshot) => {
       const users = snapshot.docs
         .map((docSnapshot) => mapUser(docSnapshot.data(), docSnapshot.id))
-        .filter((user) => user.uid !== currentUserUid)
-        .sort((a, b) => a.name.localeCompare(b.name));
+        .filter((user) => user.uid !== currentUserUid);
 
-      console.log('Usuarios Firestore:', users);
-      callback(users);
+      const filteredUsers = users.sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email));
+
+      console.log('Usuarios Firestore:', filteredUsers);
+      callback(filteredUsers);
     },
     (error) => onError?.(error as Error),
   );
+};
+
+export const getUsers = async (currentUserUid?: string): Promise<UserProfile[]> => {
+  const firestore = requireDb();
+  const snapshot = await getDocs(query(collection(firestore, 'users')));
+
+  return snapshot.docs
+    .map((docSnapshot) => mapUser(docSnapshot.data(), docSnapshot.id))
+    .filter((user) => user.uid !== currentUserUid)
+    .sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email));
 };
 
 export const getUserById = async (uid: string): Promise<UserProfile | null> => {
