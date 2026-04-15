@@ -41,7 +41,7 @@ export default function CallsScreen() {
   const usersById = useMemo(
     () =>
       users.reduce<Record<string, string>>((acc, item) => {
-        acc[item.uid] = item.name;
+        acc[item.uid] = item.name || item.email;
         return acc;
       }, {}),
     [users],
@@ -71,16 +71,19 @@ export default function CallsScreen() {
       </View>
 
       <View style={styles.container}>
-        {users.map((directoryUser) => (
-          <View style={[styles.row, { backgroundColor: palette.surface, borderColor: palette.border }]} key={directoryUser.uid}>
-            <View style={[styles.avatar, { backgroundColor: isDark ? '#20314A' : '#E8F1FF' }]}>
-              <Text style={[styles.avatarText, { color: palette.textPrimary }]}>{directoryUser.name.charAt(0)}</Text>
-            </View>
-            <View style={styles.dataWrap}>
-              <Text style={[styles.name, { color: palette.textPrimary }]}>{directoryUser.name}</Text>
-              <Text style={[styles.meta, { color: palette.textSecondary }]}>{directoryUser.email}</Text>
-            </View>
-            <View style={styles.actions}>
+        {users.map((directoryUser) => {
+          const displayName = directoryUser.name || directoryUser.email;
+
+          return (
+            <View style={[styles.row, { backgroundColor: palette.surface, borderColor: palette.border }]} key={directoryUser.uid}>
+              <View style={[styles.avatar, { backgroundColor: isDark ? '#20314A' : '#E8F1FF' }]}>
+                <Text style={[styles.avatarText, { color: palette.textPrimary }]}>{displayName.charAt(0).toUpperCase()}</Text>
+              </View>
+              <View style={styles.dataWrap}>
+                <Text style={[styles.name, { color: palette.textPrimary }]}>{displayName}</Text>
+                <Text style={[styles.meta, { color: palette.textSecondary }]}>{directoryUser.email}</Text>
+              </View>
+              <View style={styles.actions}>
               <Pressable
                 style={[styles.iconAction, { backgroundColor: isDark ? '#21314A' : '#ECF4FF' }]}
                 onPress={() => triggerCall(directoryUser.uid, 'voice')}>
@@ -92,8 +95,9 @@ export default function CallsScreen() {
                 <Ionicons name="videocam" size={20} color={palette.accent} />
               </Pressable>
             </View>
-          </View>
-        ))}
+            </View>
+          );
+        })}
 
         <Text style={[styles.historyTitle, { color: palette.textPrimary }]}>Historial</Text>
         {calls.map((call) => {

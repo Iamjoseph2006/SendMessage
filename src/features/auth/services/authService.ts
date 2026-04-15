@@ -81,6 +81,35 @@ const normalizeAuthError = (error: unknown): Error => {
   return new Error('No fue posible completar la autenticación.');
 };
 
+const ensureUserDocument = async (
+  uid: string,
+  payload: {
+    email: string;
+    name: string;
+  },
+) => {
+  const firestoreClient = getFirestoreClient();
+  const userRef = doc(firestoreClient, 'users', uid);
+  const userSnapshot = await getDoc(userRef);
+
+  if (!userSnapshot.exists()) {
+    await setDoc(userRef, {
+      uid,
+      email: payload.email,
+      name: payload.name || payload.email,
+      createdAt: serverTimestamp(),
+      online: true,
+    });
+    return;
+  }
+
+  await updateDoc(userRef, {
+    email: payload.email,
+    name: payload.name || payload.email,
+    online: true,
+  }).catch(() => undefined);
+};
+
 const ensureAuthSubscription = () => {
   if (!auth || authSubscriptionInitialized) {
     return;
@@ -90,10 +119,11 @@ const ensureAuthSubscription = () => {
   unsubscribeAuthState = onAuthStateChanged(auth, async (firebaseUser) => {
     currentUser = await mapFirebaseUser(firebaseUser);
 
-    if (firebaseUser?.uid) {
+    if (firebaseUser?.uid && firebaseUser.email) {
       try {
-        await updateDoc(doc(getFirestoreClient(), 'users', firebaseUser.uid), {
-          online: true,
+        await ensureUserDocument(firebaseUser.uid, {
+          email: firebaseUser.email,
+          name: firebaseUser.displayName?.trim() || firebaseUser.email,
         });
       } catch {
         // ignore non-critical online update errors
@@ -112,10 +142,9 @@ export const registerUser = async (email: string, password: string, name: string
     }
 
     const authClient = getAuthClient();
-    const firestoreClient = getFirestoreClient();
     const credentials = await createUserWithEmailAndPassword(authClient, email.trim(), password);
 
-    await setDoc(doc(firestoreClient, 'users', credentials.user.uid), {
+    await setDoc(doc(getFirestoreClient(), 'users', credentials.user.uid), {
       uid: credentials.user.uid,
       email: credentials.user.email,
       name: normalizedName,
@@ -145,23 +174,12 @@ export const registerUser = async (email: string, password: string, name: string
 export const loginUser = async (email: string, password: string): Promise<AppUser> => {
   try {
     const authClient = getAuthClient();
-    const firestoreClient = getFirestoreClient();
     const credentials = await signInWithEmailAndPassword(authClient, email.trim(), password);
-    const userRef = doc(firestoreClient, 'users', credentials.user.uid);
-    const userSnapshot = await getDoc(userRef);
-
-    if (!userSnapshot.exists()) {
-      await setDoc(userRef, {
-        uid: credentials.user.uid,
+    if (credentials.user.email) {
+      await ensureUserDocument(credentials.user.uid, {
         email: credentials.user.email,
-        name: credentials.user.displayName?.trim() ?? '',
-        createdAt: serverTimestamp(),
-        online: true,
+        name: credentials.user.displayName?.trim() || credentials.user.email,
       });
-    } else {
-      await updateDoc(userRef, {
-        online: true,
-      }).catch(() => undefined);
     }
 
     const mappedUser = await mapFirebaseUser(credentials.user);
@@ -184,9 +202,10 @@ export const loginUser = async (email: string, password: string): Promise<AppUse
 
 export const logoutUser = async (): Promise<void> => {
   const authClient = getAuthClient();
+  const uid = currentUser?.uid ?? authClient.currentUser?.uid;
 
-  if (currentUser?.uid) {
-    await updateDoc(doc(getFirestoreClient(), 'users', currentUser.uid), {
+  if (uid) {
+    await updateDoc(doc(getFirestoreClient(), 'users', uid), {
       online: false,
     }).catch(() => undefined);
   }
