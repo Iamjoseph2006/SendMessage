@@ -65,11 +65,27 @@ export default function ProfileScreen() {
       return;
     }
 
+    const normalizedName = nextName.trim();
+    const currentName = (profile?.name || '').trim();
+
+    if (!normalizedName) {
+      setError('El nombre no puede estar vacío.');
+      return;
+    }
+
+    if (normalizedName === currentName) {
+      setShowEditModal(false);
+      return;
+    }
+
     setSavingName(true);
     setError(null);
 
     try {
-      await updateProfileName(user.uid, nextName);
+      await Promise.race([
+        updateProfileName(user.uid, normalizedName),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('La actualización tardó demasiado. Intenta de nuevo.')), 10000)),
+      ]);
       setShowEditModal(false);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'No fue posible guardar tu nombre.');
