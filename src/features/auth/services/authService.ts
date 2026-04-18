@@ -5,6 +5,7 @@ import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signOut,
+  updateProfile,
 } from 'firebase/auth';
 import { doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { auth, db, firebaseConfigError } from '@/src/config/firebase';
@@ -85,27 +86,30 @@ const ensureUserDocument = async (
   uid: string,
   payload: {
     email: string;
-    name: string;
+    name?: string;
   },
 ) => {
   const firestoreClient = getFirestoreClient();
   const userRef = doc(firestoreClient, 'users', uid);
   const userSnapshot = await getDoc(userRef);
+  const normalizedName = payload.name?.trim();
+  const fallbackName = normalizedName || payload.email;
 
   if (!userSnapshot.exists()) {
     await setDoc(userRef, {
       uid,
       email: payload.email,
-      name: payload.name || payload.email,
+      name: fallbackName,
       createdAt: serverTimestamp(),
       online: true,
     });
     return;
   }
 
+  const currentName = (userSnapshot.data()?.name as string | undefined)?.trim();
   await updateDoc(userRef, {
     email: payload.email,
-    name: payload.name || payload.email,
+    name: normalizedName || currentName || payload.email,
     online: true,
   }).catch(() => undefined);
 };
@@ -123,7 +127,7 @@ const ensureAuthSubscription = () => {
       try {
         await ensureUserDocument(firebaseUser.uid, {
           email: firebaseUser.email,
-          name: firebaseUser.displayName?.trim() || firebaseUser.email,
+          name: firebaseUser.displayName?.trim(),
         });
       } catch {
         // ignore non-critical online update errors
@@ -143,6 +147,7 @@ export const registerUser = async (email: string, password: string, name: string
 
     const authClient = getAuthClient();
     const credentials = await createUserWithEmailAndPassword(authClient, email.trim(), password);
+    await updateProfile(credentials.user, { displayName: normalizedName });
 
     await setDoc(doc(getFirestoreClient(), 'users', credentials.user.uid), {
       uid: credentials.user.uid,
@@ -178,7 +183,7 @@ export const loginUser = async (email: string, password: string): Promise<AppUse
     if (credentials.user.email) {
       await ensureUserDocument(credentials.user.uid, {
         email: credentials.user.email,
-        name: credentials.user.displayName?.trim() || credentials.user.email,
+        name: credentials.user.displayName?.trim(),
       });
     }
 
