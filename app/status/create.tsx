@@ -1,11 +1,10 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import {
-  AudioModule,
   RecordingPresets,
   requestRecordingPermissionsAsync,
   setAudioModeAsync,
+  useAudioRecorder,
 } from 'expo-audio';
-import type { AudioRecorder } from 'expo-audio';
 import * as Location from 'expo-location';
 import { Stack, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
@@ -21,6 +20,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/features/auth/hooks/useAuth';
 import { CreateStatusInput, StatusLocation, createStatus } from '@/src/features/status/services/statusService';
@@ -41,16 +41,15 @@ export default function CreateStatusScreen() {
   const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
   const [location, setLocation] = useState<StatusLocation | null>(null);
   const [pickedEmojis, setPickedEmojis] = useState<string[]>([]);
-  const [recording, setRecording] = useState<AudioRecorder | null>(null);
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const [isRecording, setIsRecording] = useState(false);
   const [audioUri, setAudioUri] = useState<string | null>(null);
 
   useEffect(() => {
     return () => {
-      if (recording) {
-        recording.stop().catch(() => undefined);
-      }
+      recorder.stop().catch(() => undefined);
     };
-  }, [recording]);
+  }, [recorder]);
 
   const hasAnyContent = useMemo(
     () => Boolean(content.trim() || selectedImageUri || audioUri || location),
@@ -58,7 +57,29 @@ export default function CreateStatusScreen() {
   );
 
   const onPickImage = async () => {
-    setError('La selección de imágenes no está disponible en Expo Go para esta versión.');
+    setError(null);
+    const result = await launchImageLibrary({ mediaType: 'photo' });
+    if (result.errorMessage) {
+      setError(result.errorMessage);
+      return;
+    }
+    const uri = result.assets?.[0]?.uri;
+    if (uri) {
+      setSelectedImageUri(uri);
+    }
+  };
+
+  const onTakePhoto = async () => {
+    setError(null);
+    const result = await launchCamera({ mediaType: 'photo' });
+    if (result.errorMessage) {
+      setError(result.errorMessage);
+      return;
+    }
+    const uri = result.assets?.[0]?.uri;
+    if (uri) {
+      setSelectedImageUri(uri);
+    }
   };
 
   const onPickLocation = async () => {
@@ -84,13 +105,12 @@ export default function CreateStatusScreen() {
   const onRecordAudio = async () => {
     setError(null);
 
-    if (recording) {
-      await recording.stop();
-      const uri = recording.uri;
-      setRecording(null);
-      if (uri) {
-        setAudioUri(uri);
+    if (isRecording) {
+      await recorder.stop();
+      if (recorder.uri) {
+        setAudioUri(recorder.uri);
       }
+      setIsRecording(false);
       return;
     }
 
@@ -101,10 +121,9 @@ export default function CreateStatusScreen() {
     }
 
     await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
-    const nextRecording = new AudioModule.AudioRecorder(RecordingPresets.HIGH_QUALITY);
-    await nextRecording.prepareToRecordAsync();
-    nextRecording.record();
-    setRecording(nextRecording);
+    await recorder.prepareToRecordAsync();
+    recorder.record();
+    setIsRecording(true);
   };
 
   const onCreateStatus = async () => {
@@ -167,6 +186,10 @@ export default function CreateStatusScreen() {
           />
 
           <View style={styles.actionsRow}>
+            <Pressable style={styles.actionButton} onPress={onTakePhoto}>
+              <Ionicons name="camera-outline" size={18} color="#FFF" />
+              <Text style={styles.actionText}>Cámara</Text>
+            </Pressable>
             <Pressable style={styles.actionButton} onPress={onPickImage}>
               <Ionicons name="image-outline" size={18} color="#FFF" />
               <Text style={styles.actionText}>Galería</Text>
@@ -175,9 +198,9 @@ export default function CreateStatusScreen() {
               <Ionicons name="location-outline" size={18} color="#FFF" />
               <Text style={styles.actionText}>Ubicación</Text>
             </Pressable>
-            <Pressable style={[styles.actionButton, recording ? styles.recordingButton : null]} onPress={onRecordAudio}>
-              <Ionicons name={recording ? 'stop-circle-outline' : 'mic-outline'} size={18} color="#FFF" />
-              <Text style={styles.actionText}>{recording ? 'Detener' : 'Audio'}</Text>
+            <Pressable style={[styles.actionButton, isRecording ? styles.recordingButton : null]} onPress={onRecordAudio}>
+              <Ionicons name={isRecording ? 'stop-circle-outline' : 'mic-outline'} size={18} color="#FFF" />
+              <Text style={styles.actionText}>{isRecording ? 'Detener' : 'Audio'}</Text>
             </Pressable>
           </View>
 
