@@ -1,9 +1,19 @@
 import { FirestoreError } from 'firebase/firestore';
 
 const firestoreErrorMessages: Record<string, string> = {
-  'permission-denied': 'No tienes permisos para realizar esta acción. Verifica tus reglas de Firestore e inicia sesión de nuevo.',
+  'permission-denied': 'Firestore bloqueó la operación por reglas de seguridad (permission-denied). Revisa Firestore Rules en Firebase Console.',
   unavailable: 'Sin conexión con Firestore. Revisa internet e inténtalo nuevamente.',
   'network-request-failed': 'Falló la conexión de red. Revisa internet e inténtalo nuevamente.',
+};
+
+const normalizeFirebaseLikeCode = (code?: string): string => code?.replace(/^auth\//, '') ?? code ?? '';
+
+export const isPermissionDeniedFirestoreError = (error: unknown): boolean => {
+  const firebaseError = error as Partial<FirestoreError> & { message?: string; code?: string };
+  const normalizedCode = normalizeFirebaseLikeCode(firebaseError?.code);
+  const normalizedMessage = firebaseError?.message?.toLowerCase() ?? '';
+
+  return normalizedCode === 'permission-denied' || normalizedMessage.includes('permission-denied');
 };
 
 export const mapFirebaseErrorToSpanish = (
@@ -11,7 +21,7 @@ export const mapFirebaseErrorToSpanish = (
   fallback = 'Ocurrió un error inesperado al comunicarse con Firebase.',
 ): Error => {
   const firebaseError = error as Partial<FirestoreError> & { message?: string; code?: string };
-  const normalizedCode = firebaseError?.code?.replace(/^auth\//, '') ?? firebaseError?.code;
+  const normalizedCode = normalizeFirebaseLikeCode(firebaseError?.code);
 
   if (normalizedCode && firestoreErrorMessages[normalizedCode]) {
     return new Error(firestoreErrorMessages[normalizedCode]);
@@ -27,7 +37,7 @@ export const mapFirebaseErrorToSpanish = (
     return new Error(firestoreErrorMessages['network-request-failed']);
   }
 
-  if (normalizedMessage.includes('permission-denied')) {
+  if (isPermissionDeniedFirestoreError(error)) {
     return new Error(firestoreErrorMessages['permission-denied']);
   }
 
