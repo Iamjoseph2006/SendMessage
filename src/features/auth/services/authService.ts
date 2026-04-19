@@ -1,6 +1,7 @@
 import { AuthError, User, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { auth, db, firebaseConfigError } from '@/src/config/firebase';
+import { mapFirebaseErrorToSpanish } from '@/src/config/firebaseErrors';
 
 export type AppUser = {
   uid: string;
@@ -59,11 +60,41 @@ const normalizeAuthError = (error: unknown): Error => {
     return new Error(authErrorMessages[authError.code]);
   }
 
-  if (error instanceof Error && error.message) {
-    return error;
+  return mapFirebaseErrorToSpanish(error, 'No fue posible completar la autenticación.');
+};
+
+
+const isNonBlockingProfileSyncError = (error: unknown): boolean => {
+  const firebaseError = error as Partial<AuthError> & { message?: string; code?: string };
+  const normalizedCode = firebaseError?.code?.replace(/^auth\//, '') ?? firebaseError?.code ?? '';
+  const normalizedMessage = firebaseError?.message?.toLowerCase() ?? '';
+
+  return (
+    normalizedCode === 'unavailable'
+    || normalizedCode === 'network-request-failed'
+    || normalizedMessage.includes('client is offline')
+    || normalizedMessage.includes('network-request-failed')
+  );
+};
+
+const syncUserProfileSafely = async (firebaseUser: User): Promise<void> => {
+  if (!firebaseUser.email) {
+    return;
   }
 
-  return new Error('No fue posible completar la autenticación.');
+  try {
+    await ensureUserDocument(firebaseUser.uid, {
+      email: firebaseUser.email,
+      name: firebaseUser.displayName?.trim() || firebaseUser.email,
+    });
+  } catch (error) {
+    if (isNonBlockingProfileSyncError(error)) {
+      console.warn('No se pudo sincronizar perfil en Firestore durante login, se continuará con sesión autenticada.', error);
+      return;
+    }
+
+    throw error;
+  }
 };
 
 export const ensureUserDocument = async (
@@ -136,12 +167,7 @@ export const loginUser = async (email: string, password: string): Promise<AppUse
   try {
     const authClient = getAuthClient();
     const credentials = await signInWithEmailAndPassword(authClient, email.trim(), password);
-    if (credentials.user.email) {
-      await ensureUserDocument(credentials.user.uid, {
-        email: credentials.user.email,
-        name: credentials.user.displayName?.trim() || credentials.user.email,
-      });
-    }
+    await syncUserProfileSafely(credentials.user);
 
     const mappedUser = await mapFirebaseUser(credentials.user);
 
@@ -175,10 +201,7 @@ export const syncAuthenticatedUserProfile = async (firebaseUser: User | null): P
     return;
   }
 
-  await ensureUserDocument(firebaseUser.uid, {
-    email: firebaseUser.email,
-    name: firebaseUser.displayName?.trim() || firebaseUser.email,
-  });
+  await syncUserProfileSafely(firebaseUser);
 };
 
 export const getCurrentUser = async (): Promise<AppUser | null> => {
