@@ -29,6 +29,19 @@ const mapFirestoreError = (error: unknown): Error => {
   return mapFirebaseErrorToSpanish(error, 'No se pudo completar la operación de usuario en Firestore.');
 };
 
+const isOfflineFirestoreError = (error: unknown): boolean => {
+  const firestoreError = error as Partial<FirestoreError> & { message?: string };
+  const normalizedCode = firestoreError?.code ?? '';
+  const normalizedMessage = firestoreError?.message?.toLowerCase() ?? '';
+
+  return (
+    normalizedCode === 'unavailable'
+    || normalizedCode === 'network-request-failed'
+    || normalizedMessage.includes('client is offline')
+    || normalizedMessage.includes('network request failed')
+  );
+};
+
 const mapUser = (source: Record<string, unknown>, documentId: string): UserProfile => ({
   uid: documentId,
   email: (source.email as string | undefined) ?? '',
@@ -82,10 +95,22 @@ export const listenUsers = (
     usersQuery,
     (snapshot) => {
       const filteredUsers = mapUsersFromSnapshot(snapshot.docs, currentUserUid);
+
+      if (snapshot.metadata.fromCache && filteredUsers.length === 0) {
+        console.warn('[userService] Directorio users vacío desde caché local. Posible modo sin conexión o caché aún no sincronizada.');
+      }
+
       console.log(`[userService] Usuarios Firestore válidos: ${filteredUsers.length}.`);
       callback(filteredUsers);
     },
-    (error) => onError?.(mapFirestoreError(error)),
+    (error) => {
+      if (isOfflineFirestoreError(error)) {
+        onError?.(new Error('Sin conexión: no se pudo sincronizar el directorio de usuarios desde Firestore.'));
+        return;
+      }
+
+      onError?.(mapFirestoreError(error));
+    },
   );
 };
 
