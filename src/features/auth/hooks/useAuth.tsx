@@ -56,10 +56,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       auth,
       async (firebaseUser) => {
         try {
-          await syncAuthenticatedUserProfile(firebaseUser);
           const mappedUser = await mapUser(firebaseUser);
           setUser(mappedUser);
           setError(null);
+
+          if (firebaseUser) {
+            void syncAuthenticatedUserProfile(firebaseUser).catch((syncError) => {
+              console.warn(
+                'No se pudo sincronizar el perfil autenticado en segundo plano.',
+                syncError,
+              );
+            });
+          }
         } catch {
           setUser(null);
           setError('No se pudo restaurar la sesión. Vuelve a iniciar sesión.');
