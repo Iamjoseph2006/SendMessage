@@ -8,7 +8,8 @@ import { StatusItem, getStatusesByUser, markStatusAsViewed } from '@/src/feature
 import { getUsersByUids } from '@/src/features/users/services/userService';
 
 export default function StatusViewerScreen() {
-  const { userId } = useLocalSearchParams<{ userId: string }>();
+  const { userId } = useLocalSearchParams<{ userId: string | string[] }>();
+  const normalizedUserId = Array.isArray(userId) ? userId[0] : userId;
   const { user } = useAuth();
   const router = useRouter();
   const [statuses, setStatuses] = useState<StatusItem[]>([]);
@@ -16,13 +17,13 @@ export default function StatusViewerScreen() {
   const [ownerName, setOwnerName] = useState('Estado');
 
   useEffect(() => {
-    if (!userId) return;
+    if (!normalizedUserId) return;
 
-    getStatusesByUser(userId).then(setStatuses).catch(() => setStatuses([]));
-    getUsersByUids([userId])
+    getStatusesByUser(normalizedUserId).then(setStatuses).catch(() => setStatuses([]));
+    getUsersByUids([normalizedUserId])
       .then(([owner]) => setOwnerName(owner?.name ?? owner?.email ?? 'Estado'))
       .catch(() => setOwnerName('Estado'));
-  }, [userId]);
+  }, [normalizedUserId]);
 
   useEffect(() => {
     const current = statuses[index];

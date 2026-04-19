@@ -114,6 +114,8 @@ const mapFirestoreError = (error: unknown): Error => {
   return mapFirebaseErrorToSpanish(error, 'Ocurrió un error inesperado con Firestore.');
 };
 
+const isMissingIndexError = (error: unknown) => (error as Partial<FirestoreError>)?.code === 'failed-precondition';
+
 const buildMessagePreview = (input: SendMessageInput): string => {
   if (input.type === 'image') {
     return input.text?.trim() ? `📷 ${input.text.trim()}` : '📷 Imagen';
@@ -241,24 +243,52 @@ export const getChatById = async (chatId: string): Promise<Chat | null> => {
 };
 
 export const getUserChats = async (uid: string): Promise<Chat[]> => {
+  const firestore = requireDb();
+
   try {
     const snapshot = await getDocs(buildUserChatsQuery(uid));
 
     return snapshot.docs.map((docSnapshot) => mapChat(docSnapshot.id, docSnapshot.data()));
   } catch (error) {
+    if (isMissingIndexError(error)) {
+      const fallbackQuery = query(collection(firestore, 'chats'), where('participants', 'array-contains', uid), orderBy('updatedAt', 'desc'));
+      const fallbackSnapshot = await getDocs(fallbackQuery);
+      return fallbackSnapshot.docs.map((docSnapshot) => mapChat(docSnapshot.id, docSnapshot.data()));
+    }
     throw mapFirestoreError(error);
   }
 };
 
 export const listenUserChats = (uid: string, callback: (chats: Chat[]) => void, onError?: (error: Error) => void) => {
-  return onSnapshot(
-    buildUserChatsQuery(uid),
+  const firestore = requireDb();
+  const primaryQuery = buildUserChatsQuery(uid);
+  const fallbackQuery = query(collection(firestore, 'chats'), where('participants', 'array-contains', uid), orderBy('updatedAt', 'desc'));
+
+  let unsubscribe = onSnapshot(
+    primaryQuery,
     (snapshot) => {
       const chats = snapshot.docs.map((docSnapshot) => mapChat(docSnapshot.id, docSnapshot.data()));
       callback(chats);
     },
-    (error) => onError?.(mapFirestoreError(error)),
+    (error) => {
+      if (isMissingIndexError(error)) {
+        unsubscribe();
+        unsubscribe = onSnapshot(
+          fallbackQuery,
+          (snapshot) => {
+            const chats = snapshot.docs.map((docSnapshot) => mapChat(docSnapshot.id, docSnapshot.data()));
+            callback(chats);
+          },
+          (fallbackError) => onError?.(mapFirestoreError(fallbackError)),
+        );
+        return;
+      }
+
+      onError?.(mapFirestoreError(error));
+    },
   );
+
+  return () => unsubscribe();
 };
 
 export const sendMessage = async (chatId: string, text: string, senderId: string, type: ChatMessageType = 'text'): Promise<string> =>

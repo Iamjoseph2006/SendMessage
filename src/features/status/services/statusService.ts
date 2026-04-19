@@ -78,6 +78,8 @@ const mapFirestoreError = (error: unknown): Error => {
   return mapFirebaseErrorToSpanish(error, 'No se pudo completar la operación de estados.');
 };
 
+const isMissingIndexError = (error: unknown) => (error as Partial<FirestoreError>)?.code === 'failed-precondition';
+
 const uploadStatusMedia = async (userId: string, uri: string, kind: 'image' | 'audio') => {
   const storage = getStorageInstance();
   const response = await fetch(uri);
@@ -210,6 +212,13 @@ export const getStatusesByUser = async (userId: string): Promise<StatusItem[]> =
     const snapshot = await getDocs(q);
     return snapshot.docs.map((docSnapshot) => mapStatus(docSnapshot.id, docSnapshot.data())).filter((status) => !isExpired(status));
   } catch (error) {
+    if (isMissingIndexError(error)) {
+      const fallbackQuery = query(collection(firestore, 'status'), orderBy('createdAt', 'desc'));
+      const fallbackSnapshot = await getDocs(fallbackQuery);
+      return fallbackSnapshot.docs
+        .map((docSnapshot) => mapStatus(docSnapshot.id, docSnapshot.data()))
+        .filter((status) => status.userId === userId && !isExpired(status));
+    }
     throw mapFirestoreError(error);
   }
 };

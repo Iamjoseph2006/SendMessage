@@ -9,6 +9,7 @@ export type UserProfile = {
   name: string;
   photoURL: string | null;
   online: boolean;
+  lastSeen?: Timestamp | null;
   createdAt?: Timestamp | null;
   updatedAt?: Timestamp | null;
 };
@@ -63,6 +64,7 @@ const mapUser = (source: Record<string, unknown>, documentId: string): UserProfi
     name,
     photoURL: (source.photoURL as string | null | undefined) ?? null,
     online: Boolean(source.online),
+    lastSeen: (source.lastSeen as Timestamp | undefined) ?? null,
     createdAt: (source.createdAt as Timestamp | undefined) ?? null,
     updatedAt: (source.updatedAt as Timestamp | undefined) ?? null,
   };

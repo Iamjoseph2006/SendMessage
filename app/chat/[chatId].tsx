@@ -30,7 +30,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAuth } from '@/src/features/auth/hooks/useAuth';
 import { useChat } from '@/src/features/chat/hooks/useChat';
 import { ChatLocation, ChatMessage, getChatById } from '@/src/features/chat/services/chatService';
-import { getUsersByUids } from '@/src/features/users/services/userService';
+import { UserProfile, getUsersByUids, listenUserById } from '@/src/features/users/services/userService';
 import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
 
 const EDIT_WINDOW_MS = 15 * 60 * 1000;
@@ -86,6 +86,7 @@ export default function ConversationScreen() {
     error,
   } = useChat(chatId ?? null, user?.uid ?? null);
   const [chatName, setChatName] = useState('Chat');
+  const [contactProfile, setContactProfile] = useState<UserProfile | null>(null);
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const [isRecording, setIsRecording] = useState(false);
 
@@ -118,6 +119,7 @@ export default function ConversationScreen() {
       return;
     }
 
+    let unsubscribePresence: (() => void) | undefined;
     getChatById(chatId)
       .then(async (chat) => {
         if (!chat) {
@@ -132,12 +134,52 @@ export default function ConversationScreen() {
         }
 
         const [profile] = await getUsersByUids([contactUid]);
+        setContactProfile(profile ?? null);
         setChatName(profile?.name ?? profile?.email ?? 'Chat');
+        unsubscribePresence = listenUserById(contactUid, (nextProfile) => {
+          setContactProfile(nextProfile);
+        });
       })
       .catch(() => {
         setChatName('Chat');
+        setContactProfile(null);
       });
+
+    return () => {
+      unsubscribePresence?.();
+    };
   }, [chatId, user?.uid]);
+
+  useEffect(() => {
+    if (!loading && visibleMessages.length > 0) {
+      listRef.current?.scrollToEnd({ animated: false });
+    }
+  }, [chatId, loading, visibleMessages.length]);
+
+  const availabilityLabel = useMemo(() => {
+    if (!contactProfile) {
+      return 'No disponible';
+    }
+
+    if (contactProfile.online) {
+      return 'En línea';
+    }
+
+    const lastSeenDate = contactProfile.lastSeen?.toDate();
+    if (!lastSeenDate) {
+      return 'No disponible';
+    }
+
+    const now = new Date();
+    const isToday = now.toDateString() === lastSeenDate.toDateString();
+    const time = new Intl.DateTimeFormat('es-ES', { hour: 'numeric', minute: '2-digit' }).format(lastSeenDate);
+    if (isToday) {
+      return `Última vez hoy a las ${time}`;
+    }
+
+    const dateLabel = new Intl.DateTimeFormat('es-ES', { day: '2-digit', month: '2-digit' }).format(lastSeenDate);
+    return `Última vez ${dateLabel} a las ${time}`;
+  }, [contactProfile]);
 
   useEffect(() => {
     return () => {
@@ -253,9 +295,14 @@ export default function ConversationScreen() {
           <Pressable onPress={() => router.back()} style={styles.backButton}>
             <Ionicons name="chevron-back" size={22} color={palette.textPrimary} />
           </Pressable>
-          <Text style={[styles.headerName, { color: palette.textPrimary }]} numberOfLines={1}>
-            {chatName}
-          </Text>
+          <View style={styles.headerTextWrap}>
+            <Text style={[styles.headerName, { color: palette.textPrimary }]} numberOfLines={1}>
+              {chatName}
+            </Text>
+            <Text style={[styles.headerSubtitle, { color: contactProfile?.online ? '#14A44D' : palette.textSecondary }]} numberOfLines={1}>
+              {availabilityLabel}
+            </Text>
+          </View>
         </View>
 
         {pinnedMessage ? (
@@ -362,7 +409,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerName: { fontSize: 18, fontWeight: '700', flex: 1 },
+  headerTextWrap: { flex: 1, gap: 1 },
+  headerName: { fontSize: 18, fontWeight: '700' },
+  headerSubtitle: { fontSize: 12, fontWeight: '600' },
   pinnedBar: { flexDirection: 'row', gap: 8, borderBottomWidth: 1, paddingHorizontal: 12, paddingVertical: 8, alignItems: 'center' },
   pinnedText: { flex: 1, fontSize: 13, fontWeight: '600' },
   loading: { marginTop: 12 },

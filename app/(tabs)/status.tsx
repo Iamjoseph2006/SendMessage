@@ -32,14 +32,18 @@ export default function StatusScreen() {
       async (nextStatuses) => {
         setError(null);
         setStatuses(nextStatuses);
-        const userIds = [...new Set(nextStatuses.map((item) => item.userId).filter(Boolean))];
-        const users = await getUsersByUids(userIds);
-        setUsersById(
-          users.reduce<Record<string, string>>((acc, item) => {
-            acc[item.uid] = item.name;
-            return acc;
-          }, {}),
-        );
+        try {
+          const userIds = [...new Set(nextStatuses.map((item) => item.userId).filter(Boolean))];
+          const users = await getUsersByUids(userIds);
+          setUsersById(
+            users.reduce<Record<string, string>>((acc, item) => {
+              acc[item.uid] = item.name;
+              return acc;
+            }, {}),
+          );
+        } catch {
+          setUsersById({});
+        }
       },
       (listenError) => setError(listenError.message),
     );
@@ -59,12 +63,14 @@ export default function StatusScreen() {
         grouped.set(item.userId, row);
       });
 
-    const rows: ContactStatusGroup[] = Array.from(grouped.entries()).map(([userId, items]) => ({
-      userId,
-      ownerName: usersById[userId] ?? 'Usuario',
-      latest: items[0],
-      unreadCount: items.filter((status) => !(status.viewedBy ?? []).includes(user?.uid ?? '')).length,
-    }));
+    const rows: ContactStatusGroup[] = Array.from(grouped.entries())
+      .map(([userId, items]) => ({
+        userId,
+        ownerName: usersById[userId] ?? 'Usuario',
+        latest: items.sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0))[0],
+        unreadCount: items.filter((status) => !(status.viewedBy ?? []).includes(user?.uid ?? '')).length,
+      }))
+      .sort((a, b) => (b.latest.createdAt?.toMillis() ?? 0) - (a.latest.createdAt?.toMillis() ?? 0));
 
     return { myStatuses: mine, contactGroups: rows };
   }, [statuses, user?.uid, usersById]);

@@ -34,6 +34,7 @@ export default function ChatsScreen() {
     return chats.map((chat: Chat) => {
       const contactUid = chat.participants.find((participantId) => participantId !== user.uid) ?? '';
       const contact = usersByUid.get(contactUid);
+      const presenceLabel = contact?.online ? 'En línea' : 'No disponible';
 
       return {
         id: chat.id,
@@ -41,11 +42,12 @@ export default function ChatsScreen() {
         title: contact?.name || contact?.email || 'Sin nombre',
         lastMessageAt: chat.lastMessageAt?.toMillis() ?? chat.updatedAt?.toMillis() ?? 0,
         lastMessageSenderId: chat.lastMessageSenderId || '',
+        presenceLabel,
         subtitle: chat.lastMessage
           ? `${chat.lastMessageSenderId === user.uid ? 'Tú: ' : ''}${chat.lastMessage}`
           : contact?.email || 'Sin mensajes todavía',
       };
-    });
+    }).sort((a, b) => b.lastMessageAt - a.lastMessageAt);
   }, [chats, user?.uid, usersByUid]);
 
   useEffect(() => {
@@ -98,7 +100,12 @@ export default function ChatsScreen() {
               <Text style={styles.avatarText}>{getAvatarInitials(item.title)}</Text>
             </View>
             <View style={styles.textWrap}>
-              <Text style={[styles.name, { color: palette.textPrimary }]}>{item.title}</Text>
+              <View style={styles.nameRow}>
+                <Text style={[styles.name, { color: palette.textPrimary }]}>{item.title}</Text>
+                <Text style={[styles.presence, { color: item.presenceLabel === 'En línea' ? '#14A44D' : palette.textSecondary }]}>
+                  {item.presenceLabel}
+                </Text>
+              </View>
               <Text numberOfLines={1} style={[styles.lastMessage, { color: palette.textSecondary }]}>
                 {item.subtitle}
               </Text>
@@ -139,7 +146,9 @@ const styles = StyleSheet.create({
   },
   avatarText: { fontWeight: '700', fontSize: 18, color: '#234' },
   textWrap: { flex: 1, gap: 2 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   name: { fontSize: 16, fontWeight: '700' },
+  presence: { fontSize: 12, fontWeight: '600' },
   lastMessage: { fontSize: 13 },
   fab: {
     position: 'absolute',
