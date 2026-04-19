@@ -1,4 +1,4 @@
-import { AuthError, User, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { AuthError, User, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile } from 'firebase/auth';
 import { doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { auth, db, firebaseConfigError } from '@/src/config/firebase';
 import { mapFirebaseErrorToSpanish } from '@/src/config/firebaseErrors';
@@ -217,6 +217,12 @@ export const registerUser = async (email: string, password: string, name: string
 
     const authClient = getAuthClient();
     const credentials = await createUserWithEmailAndPassword(authClient, normalizedEmail, password);
+
+    await updateProfile(credentials.user, {
+      displayName: normalizedName,
+    }).catch((profileError) => {
+      console.warn('No se pudo guardar displayName en Auth durante el registro.', profileError);
+    });
 
     const profilePayload = normalizeProfilePayload(credentials.user.uid, {
       email: credentials.user.email ?? normalizedEmail,
