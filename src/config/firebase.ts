@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FirebaseApp, getApp, getApps, initializeApp } from 'firebase/app';
 import { Auth, getAuth, getReactNativePersistence, initializeAuth } from 'firebase/auth';
-import { Firestore, getFirestore, initializeFirestore } from 'firebase/firestore';
+import { Firestore, initializeFirestore } from 'firebase/firestore';
 
 type FirebaseEnvKey =
   | 'EXPO_PUBLIC_FIREBASE_API_KEY'
@@ -52,16 +52,25 @@ const createAuth = (firebaseApp: FirebaseApp): Auth => {
   }
 };
 
+const FIRESTORE_INSTANCE_KEY = '__SENDMESSAGE_FIRESTORE_INSTANCE__';
+
 const createFirestore = (firebaseApp: FirebaseApp): Firestore => {
-  try {
-    return initializeFirestore(firebaseApp, {
-      experimentalForceLongPolling: true,
-      // @ts-expect-error useFetchStreams is supported by Firestore Web SDK at runtime and prevents stream abort loops in Expo/WebView.
-      useFetchStreams: false,
-    });
-  } catch {
-    return getFirestore(firebaseApp);
+  const globalScope = globalThis as typeof globalThis & {
+    [FIRESTORE_INSTANCE_KEY]?: Firestore;
+  };
+
+  if (globalScope[FIRESTORE_INSTANCE_KEY]) {
+    return globalScope[FIRESTORE_INSTANCE_KEY];
   }
+
+  const firestore = initializeFirestore(firebaseApp, {
+    experimentalForceLongPolling: true,
+    // @ts-expect-error useFetchStreams is supported by Firestore Web SDK at runtime and prevents stream abort loops in Expo/WebView.
+    useFetchStreams: false,
+  });
+
+  globalScope[FIRESTORE_INSTANCE_KEY] = firestore;
+  return firestore;
 };
 
 const auth: Auth | null = app ? createAuth(app) : null;
