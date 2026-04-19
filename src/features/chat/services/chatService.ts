@@ -15,6 +15,7 @@ import {
   where,
 } from 'firebase/firestore';
 import { db } from '@/src/config/firebase';
+import { mapFirebaseErrorToSpanish } from '@/src/config/firebaseErrors';
 
 export type Chat = {
   id: string;
@@ -65,23 +66,12 @@ const buildChatId = (uid1: string, uid2: string) => toDeterministicParticipants(
 
 const mapFirestoreError = (error: unknown): Error => {
   const firestoreError = error as Partial<FirestoreError>;
-  if (firestoreError?.code === 'permission-denied') {
-    return new Error('No tienes permisos para leer/escribir este chat. Revisa firestore.rules y tu sesión.');
-  }
 
   if (firestoreError?.code === 'failed-precondition') {
     return new Error('Falta un índice de Firestore para esta consulta. Despliega firestore.indexes.json.');
   }
 
-  if (firestoreError?.code === 'unavailable') {
-    return new Error('Firestore no está disponible temporalmente. Revisa conexión y vuelve a intentar.');
-  }
-
-  if (error instanceof Error) {
-    return error;
-  }
-
-  return new Error('Ocurrió un error inesperado con Firestore.');
+  return mapFirebaseErrorToSpanish(error, 'Ocurrió un error inesperado con Firestore.');
 };
 
 const mapChat = (id: string, data: Record<string, unknown>): Chat => ({

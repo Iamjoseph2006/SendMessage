@@ -1,5 +1,6 @@
 import { FirestoreError, Timestamp, collection, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
 import { db } from '@/src/config/firebase';
+import { mapFirebaseErrorToSpanish } from '@/src/config/firebaseErrors';
 
 export type UserProfile = {
   uid: string;
@@ -21,19 +22,11 @@ const requireDb = () => {
 const mapFirestoreError = (error: unknown): Error => {
   const firestoreError = error as Partial<FirestoreError>;
 
-  if (firestoreError?.code === 'permission-denied') {
-    return new Error('No tienes permisos para esta operación. Revisa firestore.rules e inicia sesión de nuevo.');
-  }
-
   if (firestoreError?.code === 'failed-precondition') {
     return new Error('Falta un índice en Firestore para completar la consulta.');
   }
 
-  if (error instanceof Error) {
-    return error;
-  }
-
-  return new Error('No se pudo completar la operación de usuario en Firestore.');
+  return mapFirebaseErrorToSpanish(error, 'No se pudo completar la operación de usuario en Firestore.');
 };
 
 const mapUser = (source: Record<string, unknown>, documentId: string): UserProfile => ({

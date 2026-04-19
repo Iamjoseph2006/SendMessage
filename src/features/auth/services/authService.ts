@@ -1,6 +1,7 @@
 import { AuthError, User, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { auth, db, firebaseConfigError } from '@/src/config/firebase';
+import { mapFirebaseErrorToSpanish } from '@/src/config/firebaseErrors';
 
 export type AppUser = {
   uid: string;
@@ -64,11 +65,7 @@ const normalizeAuthError = (error: unknown): Error => {
     return new Error(authErrorMessages[authError.code]);
   }
 
-  if (error instanceof Error && error.message) {
-    return error;
-  }
-
-  return new Error('No fue posible completar la autenticación.');
+  return mapFirebaseErrorToSpanish(error, 'No fue posible completar la autenticación.');
 };
 
 const normalizeProfilePayload = (uid: string, payload: EnsureUserProfilePayload) => {
