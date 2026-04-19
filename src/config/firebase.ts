@@ -30,13 +30,13 @@ const firebaseConfigWarnings: string[] = [];
 
 if (isAndroidAppId) {
   firebaseConfigWarnings.push(
-    `EXPO_PUBLIC_FIREBASE_APP_ID parece de Android (${appId}). Debes usar el appId de una Web App para el SDK JS en Expo.`,
+    `EXPO_PUBLIC_FIREBASE_APP_ID parece de Android (${appId}). Debes copiar el appId de una Web App desde Firebase Console (termina en :web:...).`,
   );
 }
 
 if (!isWebAppId && appId) {
   firebaseConfigWarnings.push(
-    `EXPO_PUBLIC_FIREBASE_APP_ID no tiene formato de Web App (:web:). Valor actual: ${appId}.`,
+    `EXPO_PUBLIC_FIREBASE_APP_ID no tiene formato de Web App (:web:). Valor actual: ${appId}. Este proyecto Expo solo acepta appId web.`,
   );
 }
 
