@@ -1,4 +1,4 @@
-import { Timestamp, collection, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
+import { FirestoreError, Timestamp, collection, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
 import { db } from '@/src/config/firebase';
 
 export type UserProfile = {
@@ -16,6 +16,25 @@ const requireDb = () => {
   }
 
   return db;
+};
+
+
+const mapFirestoreError = (error: unknown): Error => {
+  const firestoreError = error as Partial<FirestoreError>;
+
+  if (firestoreError?.code === 'permission-denied') {
+    return new Error('No tienes permisos para esta operación. Revisa firestore.rules e inicia sesión de nuevo.');
+  }
+
+  if (firestoreError?.code === 'failed-precondition') {
+    return new Error('Falta un índice en Firestore para completar la consulta.');
+  }
+
+  if (error instanceof Error) {
+    return error;
+  }
+
+  return new Error('No se pudo completar la operación de usuario en Firestore.');
 };
 
 const mapUser = (source: Record<string, unknown>, documentId: string): UserProfile => ({
@@ -48,16 +67,21 @@ export const listenUsers = (
 
       const filteredUsers = users.sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email));
 
-      console.log('Usuarios Firestore:', filteredUsers);
       callback(filteredUsers);
     },
-    (error) => onError?.(error as Error),
+    (error) => onError?.(mapFirestoreError(error)),
   );
 };
 
 export const getUsers = async (currentUserUid?: string): Promise<UserProfile[]> => {
   const firestore = requireDb();
-  const snapshot = await getDocs(query(collection(firestore, 'users')));
+  let snapshot;
+
+  try {
+    snapshot = await getDocs(query(collection(firestore, 'users')));
+  } catch (error) {
+    throw mapFirestoreError(error);
+  }
 
   return snapshot.docs
     .map((docSnapshot) => mapUser(docSnapshot.data(), docSnapshot.id))
@@ -67,14 +91,19 @@ export const getUsers = async (currentUserUid?: string): Promise<UserProfile[]> 
 
 export const getUserById = async (uid: string): Promise<UserProfile | null> => {
   const firestore = requireDb();
-  const userSnapshot = await getDoc(doc(firestore, 'users', uid));
+  let userSnapshot;
+
+  try {
+    userSnapshot = await getDoc(doc(firestore, 'users', uid));
+  } catch (error) {
+    throw mapFirestoreError(error);
+  }
 
   if (!userSnapshot.exists()) {
     return null;
   }
 
   const profile = mapUser(userSnapshot.data(), userSnapshot.id);
-  console.log('[users/getUserById] Perfil de usuario', profile);
   return profile;
 };
 
@@ -94,10 +123,9 @@ export const listenUserById = (
       }
 
       const profile = mapUser(snapshot.data(), snapshot.id);
-      console.log('[users/listenUserById] Perfil en tiempo real', profile);
       callback(profile);
     },
-    (error) => onError?.(error as Error),
+    (error) => onError?.(mapFirestoreError(error)),
   );
 };
 
@@ -109,11 +137,19 @@ export const updateUserName = async (uid: string, name: string) => {
     throw new Error('El nombre no puede estar vacío.');
   }
 
-  await setDoc(doc(firestore, 'users', uid), {
-    uid,
-    name: nextName,
-    updatedAt: serverTimestamp(),
-  }, { merge: true });
+  try {
+    await setDoc(
+      doc(firestore, 'users', uid),
+      {
+        uid,
+        name: nextName,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true },
+    );
+  } catch (error) {
+    throw mapFirestoreError(error);
+  }
 };
 
 export const getUsersByUids = async (uids: string[]): Promise<UserProfile[]> => {
@@ -124,9 +160,14 @@ export const getUsersByUids = async (uids: string[]): Promise<UserProfile[]> => 
 
   const firestore = requireDb();
   const usersQuery = query(collection(firestore, 'users'), where('uid', 'in', uniqueUids.slice(0, 10)));
-  const snapshot = await getDocs(usersQuery);
+  let snapshot;
+
+  try {
+    snapshot = await getDocs(usersQuery);
+  } catch (error) {
+    throw mapFirestoreError(error);
+  }
 
   const users = snapshot.docs.map((docSnapshot) => mapUser(docSnapshot.data(), docSnapshot.id));
-  console.log('[users/getUsersByUids] Usuarios por uid', users);
   return users;
 };

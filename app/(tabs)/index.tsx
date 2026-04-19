@@ -11,7 +11,7 @@ import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme
 
 export default function ChatsScreen() {
   const { user } = useAuth();
-  const { chats, loading } = useUserChats(user?.uid ?? null);
+  const { chats, loading, error: chatsError } = useUserChats(user?.uid ?? null);
   const { users: directory, loading: usersLoading, error: usersError } = useUsersDirectory(user?.uid ?? null);
   const { isDark } = useAppTheme();
   const palette = isDark ? darkPalette : lightPalette;
@@ -27,11 +27,6 @@ export default function ChatsScreen() {
     [directory],
   );
 
-  console.log('Usuario actual:', user);
-  directory.forEach((directoryUser) => {
-    console.log('Nombre:', directoryUser.name);
-  });
-
   const rows = useMemo(() => {
     if (!user?.uid) {
       return [];
@@ -45,7 +40,7 @@ export default function ChatsScreen() {
         id: chat.id,
         contactUid,
         title: contact?.name || contact?.email || 'Sin nombre',
-        subtitle: contact?.email ?? 'Sin correo disponible',
+        subtitle: chat.lastMessage || contact?.email || 'Sin mensajes todavía',
       };
     });
   }, [chats, user?.uid, usersByUid]);
@@ -77,7 +72,7 @@ export default function ChatsScreen() {
 
       {loading ? <ActivityIndicator style={styles.loading} size="large" /> : null}
 
-      {screenError || usersError ? <Text style={styles.error}>{screenError ?? usersError}</Text> : null}
+      {screenError || usersError || chatsError ? <Text style={styles.error}>{screenError ?? usersError ?? chatsError}</Text> : null}
 
       <FlatList
         data={rows}

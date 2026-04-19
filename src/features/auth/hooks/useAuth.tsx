@@ -1,7 +1,13 @@
 import { onAuthStateChanged } from 'firebase/auth';
 import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
 import { auth } from '@/src/config/firebase';
-import { AppUser, loginUser, logoutUser, registerUser } from '@/src/features/auth/services/authService';
+import {
+  AppUser,
+  loginUser,
+  logoutUser,
+  registerUser,
+  syncAuthenticatedUserProfile,
+} from '@/src/features/auth/services/authService';
 
 type AuthState = {
   user: AppUser | null;
@@ -14,7 +20,12 @@ type AuthState = {
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
-const mapUser = async (firebaseUser: { uid: string; email: string | null; displayName: string | null; getIdToken: () => Promise<string> } | null) => {
+const mapUser = async (firebaseUser: {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  getIdToken: () => Promise<string>;
+} | null) => {
   if (!firebaseUser?.email) {
     return null;
   }
@@ -41,11 +52,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
 
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      const mappedUser = await mapUser(firebaseUser);
-      setUser(mappedUser);
-      setLoading(false);
-    });
+    const unsubscribe = onAuthStateChanged(
+      auth,
+      async (firebaseUser) => {
+        try {
+          await syncAuthenticatedUserProfile(firebaseUser);
+          const mappedUser = await mapUser(firebaseUser);
+          setUser(mappedUser);
+          setError(null);
+        } catch {
+          setUser(null);
+          setError('No se pudo restaurar la sesión. Vuelve a iniciar sesión.');
+        } finally {
+          setLoading(false);
+        }
+      },
+      (authError) => {
+        setUser(null);
+        setError(authError.message || 'No se pudo validar el estado de autenticación.');
+        setLoading(false);
+      },
+    );
 
     return unsubscribe;
   }, []);

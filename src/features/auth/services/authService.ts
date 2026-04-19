@@ -1,11 +1,4 @@
-import {
-  AuthError,
-  User,
-  createUserWithEmailAndPassword,
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  signOut,
-} from 'firebase/auth';
+import { AuthError, User, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { auth, db, firebaseConfigError } from '@/src/config/firebase';
 
@@ -15,11 +8,6 @@ export type AppUser = {
   idToken: string;
   displayName?: string;
 };
-
-let currentUser: AppUser | null = null;
-let authSubscriptionInitialized = false;
-let unsubscribeAuthState: (() => void) | null = null;
-const listeners = new Set<(user: AppUser | null) => void>();
 
 const firebaseNotConfiguredError = () =>
   new Error(firebaseConfigError ?? 'Firebase no está configurado.');
@@ -55,17 +43,14 @@ const mapFirebaseUser = async (user: User | null): Promise<AppUser | null> => {
   };
 };
 
-const notify = () => {
-  listeners.forEach((callback) => callback(currentUser));
-};
-
 const authErrorMessages: Record<string, string> = {
-  'auth/invalid-email': 'Correo inválido',
-  'auth/user-not-found': 'Usuario no encontrado',
-  'auth/wrong-password': 'Contraseña incorrecta',
-  'auth/email-already-in-use': 'El correo ya está registrado',
-  'auth/invalid-credential': 'Correo o contraseña incorrectos',
-  'auth/weak-password': 'La contraseña es demasiado débil',
+  'auth/invalid-email': 'Correo inválido.',
+  'auth/user-not-found': 'Usuario no encontrado.',
+  'auth/wrong-password': 'Contraseña incorrecta.',
+  'auth/email-already-in-use': 'El correo ya está registrado.',
+  'auth/invalid-credential': 'Correo o contraseña incorrectos.',
+  'auth/weak-password': 'La contraseña es demasiado débil.',
+  'auth/network-request-failed': 'Sin conexión de red. Verifica internet e inténtalo nuevamente.',
 };
 
 const normalizeAuthError = (error: unknown): Error => {
@@ -81,7 +66,7 @@ const normalizeAuthError = (error: unknown): Error => {
   return new Error('No fue posible completar la autenticación.');
 };
 
-const ensureUserDocument = async (
+export const ensureUserDocument = async (
   uid: string,
   payload: {
     email: string;
@@ -98,6 +83,7 @@ const ensureUserDocument = async (
       email: payload.email,
       name: payload.name || payload.email,
       createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
       online: true,
     });
     return;
@@ -110,55 +96,29 @@ const ensureUserDocument = async (
     email: payload.email,
     ...(currentName ? {} : { name: payload.name || payload.email }),
     online: true,
+    updatedAt: serverTimestamp(),
   }).catch(() => undefined);
-};
-
-const ensureAuthSubscription = () => {
-  if (!auth || authSubscriptionInitialized) {
-    return;
-  }
-
-  authSubscriptionInitialized = true;
-  unsubscribeAuthState = onAuthStateChanged(auth, async (firebaseUser) => {
-    currentUser = await mapFirebaseUser(firebaseUser);
-
-    if (firebaseUser?.uid && firebaseUser.email) {
-      try {
-        await ensureUserDocument(firebaseUser.uid, {
-          email: firebaseUser.email,
-          name: firebaseUser.displayName?.trim() || firebaseUser.email,
-        });
-      } catch {
-        // ignore non-critical online update errors
-      }
-    }
-
-    notify();
-  });
 };
 
 export const registerUser = async (email: string, password: string, name: string): Promise<AppUser> => {
   try {
+    const normalizedEmail = email.trim();
     const normalizedName = name.trim();
+
     if (!normalizedName) {
       throw new Error('El nombre es obligatorio.');
     }
 
     const authClient = getAuthClient();
-    const credentials = await createUserWithEmailAndPassword(authClient, email.trim(), password);
+    const credentials = await createUserWithEmailAndPassword(authClient, normalizedEmail, password);
 
     await setDoc(doc(getFirestoreClient(), 'users', credentials.user.uid), {
       uid: credentials.user.uid,
       email: credentials.user.email,
       name: normalizedName,
       createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
       online: true,
-    });
-
-    console.log('[auth/registerUser] Usuario guardado en Firestore', {
-      uid: credentials.user.uid,
-      email: credentials.user.email,
-      name: normalizedName,
     });
 
     const mappedUser = await mapFirebaseUser(credentials.user);
@@ -166,8 +126,6 @@ export const registerUser = async (email: string, password: string, name: string
       throw new Error('No fue posible crear la sesión del usuario.');
     }
 
-    currentUser = mappedUser;
-    notify();
     return mappedUser;
   } catch (error) {
     throw normalizeAuthError(error);
@@ -191,12 +149,6 @@ export const loginUser = async (email: string, password: string): Promise<AppUse
       throw new Error('No fue posible iniciar sesión con este usuario.');
     }
 
-    currentUser = mappedUser;
-    console.log('[auth/loginUser] Usuario autenticado', {
-      uid: mappedUser.uid,
-      email: mappedUser.email,
-    });
-    notify();
     return mappedUser;
   } catch (error) {
     throw normalizeAuthError(error);
@@ -205,54 +157,30 @@ export const loginUser = async (email: string, password: string): Promise<AppUse
 
 export const logoutUser = async (): Promise<void> => {
   const authClient = getAuthClient();
-  const uid = currentUser?.uid ?? authClient.currentUser?.uid;
+  const uid = authClient.currentUser?.uid;
 
   if (uid) {
     await updateDoc(doc(getFirestoreClient(), 'users', uid), {
       online: false,
+      updatedAt: serverTimestamp(),
     }).catch(() => undefined);
   }
 
   await signOut(authClient);
-  currentUser = null;
-  notify();
 };
 
-export const getCurrentUser = (): AppUser | null => {
-  if (!currentUser && auth?.currentUser?.email) {
-    return {
-      uid: auth.currentUser.uid,
-      email: auth.currentUser.email,
-      idToken: '',
-      displayName: auth.currentUser.displayName ?? undefined,
-    };
+
+export const syncAuthenticatedUserProfile = async (firebaseUser: User | null): Promise<void> => {
+  if (!firebaseUser?.uid || !firebaseUser.email) {
+    return;
   }
 
-  return currentUser;
+  await ensureUserDocument(firebaseUser.uid, {
+    email: firebaseUser.email,
+    name: firebaseUser.displayName?.trim() || firebaseUser.email,
+  });
 };
 
-export const observeAuthState = (callback: (user: AppUser | null) => void) => {
-  listeners.add(callback);
-
-  if (!auth) {
-    currentUser = null;
-    callback(currentUser);
-
-    return () => {
-      listeners.delete(callback);
-    };
-  }
-
-  ensureAuthSubscription();
-  callback(currentUser);
-
-  return () => {
-    listeners.delete(callback);
-
-    if (listeners.size === 0 && unsubscribeAuthState) {
-      unsubscribeAuthState();
-      unsubscribeAuthState = null;
-      authSubscriptionInitialized = false;
-    }
-  };
+export const getCurrentUser = async (): Promise<AppUser | null> => {
+  return mapFirebaseUser(getAuthClient().currentUser);
 };
