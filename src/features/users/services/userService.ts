@@ -1,4 +1,4 @@
-import { User as FirebaseUser } from 'firebase/auth';
+import { User as FirebaseUser, updateProfile as updateAuthProfile } from 'firebase/auth';
 import { FirestoreError, Timestamp, collection, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
 import { auth, db, firebaseConfig } from '@/src/config/firebase';
 import { isPermissionDeniedFirestoreError, mapFirebaseErrorToSpanish } from '@/src/config/firebaseErrors';
@@ -437,6 +437,14 @@ export const updateUserName = async (uid: string, name: string) => {
       },
       { merge: true },
     );
+
+    if (auth?.currentUser?.uid === uid) {
+      await updateAuthProfile(auth.currentUser, {
+        displayName: nextName,
+      }).catch((error) => {
+        console.warn('[userService] No se pudo sincronizar displayName en Auth tras actualizar perfil.', error);
+      });
+    }
   } catch (error) {
     throw mapFirestoreError(error);
   }

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/features/auth/hooks/useAuth';
-import { createCall, getCallHistory, CallLog, CallType } from '@/src/features/calls/services/callService';
+import { createCall, listenCallHistory, CallLog, CallType } from '@/src/features/calls/services/callService';
 import { getUsers, UserProfile } from '@/src/features/users/services/userService';
 import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
 
@@ -26,9 +26,9 @@ export default function CallsScreen() {
     }
 
     try {
-      const [history, directory] = await Promise.all([getCallHistory(user.uid), getUsers(user.uid)]);
-      setCalls(history);
+      const directory = await getUsers(user.uid);
       setUsers(directory.slice(0, 6));
+      setError(null);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'No se pudo cargar el historial de llamadas.');
     }
@@ -37,6 +37,26 @@ export default function CallsScreen() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    if (!user?.uid) {
+      setCalls([]);
+      return;
+    }
+
+    const unsubscribe = listenCallHistory(
+      user.uid,
+      (nextCalls) => {
+        setCalls(nextCalls);
+        setError(null);
+      },
+      (listenError) => {
+        setError(listenError.message);
+      },
+    );
+
+    return unsubscribe;
+  }, [user?.uid]);
 
   const usersById = useMemo(
     () =>
@@ -100,6 +120,9 @@ export default function CallsScreen() {
         })}
 
         <Text style={[styles.historyTitle, { color: palette.textPrimary }]}>Historial</Text>
+        {!calls.length ? (
+          <Text style={[styles.meta, { color: palette.textSecondary }]}>Aún no hay llamadas registradas.</Text>
+        ) : null}
         {calls.map((call) => {
           const isCaller = call.callerId === user?.uid;
           const counterpartId = isCaller ? call.receiverId : call.callerId;

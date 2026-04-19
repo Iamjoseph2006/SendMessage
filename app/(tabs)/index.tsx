@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/features/auth/hooks/useAuth';
@@ -17,6 +17,8 @@ export default function ChatsScreen() {
   const palette = isDark ? darkPalette : lightPalette;
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const [inAppNotice, setInAppNotice] = useState<string | null>(null);
+  const [lastNoticeAt, setLastNoticeAt] = useState(0);
 
   const usersByUid = useMemo(
     () => new Map(directory.map((directoryUser) => [directoryUser.uid, directoryUser])),
@@ -36,10 +38,37 @@ export default function ChatsScreen() {
         id: chat.id,
         contactUid,
         title: contact?.name || contact?.email || 'Sin nombre',
-        subtitle: chat.lastMessage || contact?.email || 'Sin mensajes todavía',
+        lastMessageAt: chat.lastMessageAt?.toMillis() ?? chat.updatedAt?.toMillis() ?? 0,
+        lastMessageSenderId: chat.lastMessageSenderId || '',
+        subtitle: chat.lastMessage
+          ? `${chat.lastMessageSenderId === user.uid ? 'Tú: ' : ''}${chat.lastMessage}`
+          : contact?.email || 'Sin mensajes todavía',
       };
     });
   }, [chats, user?.uid, usersByUid]);
+
+  useEffect(() => {
+    if (!user?.uid || rows.length === 0) {
+      return;
+    }
+
+    const latestIncoming = [...rows]
+      .sort((a, b) => b.lastMessageAt - a.lastMessageAt)
+      .find((row) => row.lastMessageSenderId && row.lastMessageSenderId !== user.uid);
+
+    if (!latestIncoming?.lastMessageAt) {
+      return;
+    }
+
+    if (latestIncoming.lastMessageAt <= lastNoticeAt) {
+      return;
+    }
+
+    setLastNoticeAt(latestIncoming.lastMessageAt);
+    setInAppNotice(`Nuevo mensaje de ${latestIncoming.title}`);
+    const timer = setTimeout(() => setInAppNotice(null), 3500);
+    return () => clearTimeout(timer);
+  }, [lastNoticeAt, rows, user?.uid]);
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background }]}>
@@ -76,6 +105,8 @@ export default function ChatsScreen() {
           </Pressable>
         )}
       />
+
+      {inAppNotice ? <Text style={styles.notice}>{inAppNotice}</Text> : null}
 
       <Pressable style={styles.fab} onPress={() => router.push('/chat/new')}>
         <Ionicons name="chatbubble-ellipses" size={22} color="#FFF" />
@@ -123,4 +154,15 @@ const styles = StyleSheet.create({
   },
   error: { color: '#D93025', marginHorizontal: 16, marginBottom: 8 },
   empty: { textAlign: 'center', marginTop: 24 },
+  notice: {
+    position: 'absolute',
+    bottom: 98,
+    alignSelf: 'center',
+    backgroundColor: '#1F7AE0',
+    color: '#FFF',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    fontWeight: '600',
+  },
 });
