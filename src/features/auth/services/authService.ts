@@ -74,6 +74,22 @@ const normalizeProfilePayload = (uid: string, payload: EnsureUserProfilePayload)
   };
 };
 
+const choosePersistedName = (existingName: unknown, fallbackPayloadName: string, fallbackEmail: string): string => {
+  const currentName = toTrimmedString(existingName);
+  const incomingName = toTrimmedString(fallbackPayloadName);
+  const normalizedEmail = toTrimmedString(fallbackEmail);
+
+  if (currentName) {
+    return currentName;
+  }
+
+  if (incomingName) {
+    return incomingName;
+  }
+
+  return normalizedEmail || 'Usuario';
+};
+
 const authErrorMessages: Record<string, string> = {
   'auth/invalid-email': 'Correo inválido.',
   'auth/user-not-found': 'Usuario no encontrado.',
@@ -203,10 +219,14 @@ export const ensureUserDocument = async (uid: string, payload: EnsureUserProfile
   }
 
   let existingCreatedAt: unknown = null;
+  let existingName: unknown = null;
 
   try {
     const existingSnapshot = await getDoc(userRef);
-    existingCreatedAt = existingSnapshot.exists() ? existingSnapshot.data()?.createdAt : null;
+    if (existingSnapshot.exists()) {
+      existingCreatedAt = existingSnapshot.data()?.createdAt ?? null;
+      existingName = existingSnapshot.data()?.name ?? null;
+    }
   } catch (error) {
     const firestoreError = error as Partial<FirestoreError> & { message?: string };
     console.warn(
@@ -221,13 +241,14 @@ export const ensureUserDocument = async (uid: string, payload: EnsureUserProfile
   }
 
   try {
+    const nameToPersist = choosePersistedName(existingName, normalizedProfile.name, normalizedProfile.email);
     logProfileWriteContext(normalizedProfile.uid, 'ensureUserDocument:setDoc');
     await setDoc(
       userRef,
       {
         uid: normalizedProfile.uid,
         email: normalizedProfile.email,
-        name: normalizedProfile.name,
+        name: nameToPersist,
         createdAt: existingCreatedAt ?? serverTimestamp(),
         updatedAt: serverTimestamp(),
         online: true,

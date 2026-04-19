@@ -9,11 +9,12 @@ import {
 } from 'expo-audio';
 import * as Location from 'expo-location';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Keyboard,
   Image,
   KeyboardAvoidingView,
   Linking,
@@ -25,7 +26,7 @@ import {
   View,
 } from 'react-native';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/features/auth/hooks/useAuth';
 import { useChat } from '@/src/features/chat/hooks/useChat';
 import { ChatLocation, ChatMessage, getChatById } from '@/src/features/chat/services/chatService';
@@ -61,6 +62,8 @@ export default function ConversationScreen() {
   const { isDark } = useAppTheme();
   const palette = isDark ? darkPalette : lightPalette;
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
+  const listRef = useRef<FlatList<ChatMessage>>(null);
 
   const {
     messages,
@@ -92,6 +95,23 @@ export default function ConversationScreen() {
   );
 
   const pinnedMessage = useMemo(() => visibleMessages.find((message) => message.isPinned), [visibleMessages]);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      listRef.current?.scrollToEnd({ animated: true });
+    }, 40);
+    return () => clearTimeout(timeout);
+  }, [visibleMessages.length]);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', () => {
+      listRef.current?.scrollToEnd({ animated: true });
+    });
+
+    return () => {
+      showSub.remove();
+    };
+  }, []);
 
   useEffect(() => {
     if (!chatId || !user?.uid) {
@@ -225,7 +245,10 @@ export default function ConversationScreen() {
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background }]}> 
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.safeArea}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
+        style={styles.safeArea}>
         <View style={[styles.header, { borderBottomColor: palette.border, backgroundColor: palette.surface }]}> 
           <Pressable onPress={() => router.back()} style={styles.backButton}>
             <Ionicons name="chevron-back" size={22} color={palette.textPrimary} />
@@ -248,9 +271,13 @@ export default function ConversationScreen() {
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <FlatList
+          ref={listRef}
           data={visibleMessages}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, { paddingBottom: 12 + insets.bottom }]}
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          keyboardShouldPersistTaps="handled"
+          onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
           ListEmptyComponent={!loading ? emptyState : null}
           renderItem={({ item }) => {
             const isMe = item.senderId === user?.uid;
@@ -304,6 +331,7 @@ export default function ConversationScreen() {
             placeholderTextColor="#8C9DB0"
             value={input}
             onChangeText={setInput}
+            onFocus={() => listRef.current?.scrollToEnd({ animated: true })}
           />
           <Pressable style={[styles.audioAction, isRecording ? styles.audioActionRecording : null]} onPress={onAudioPress}>
             <Ionicons name={isRecording ? 'stop' : 'mic'} size={16} color="#FFF" />

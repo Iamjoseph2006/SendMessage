@@ -143,6 +143,14 @@ const mapChat = (id: string, data: Record<string, unknown>): Chat => ({
   pinnedAt: (data.pinnedAt as Timestamp | undefined) ?? null,
 });
 
+const buildUserChatsQuery = (uid: string) =>
+  query(
+    collection(requireDb(), 'chats'),
+    where('participants', 'array-contains', uid),
+    orderBy('lastMessageAt', 'desc'),
+    orderBy('updatedAt', 'desc'),
+  );
+
 const mapMessage = (id: string, data: Record<string, unknown>): ChatMessage => ({
   id,
   chatId: data.chatId as string,
@@ -233,15 +241,8 @@ export const getChatById = async (chatId: string): Promise<Chat | null> => {
 };
 
 export const getUserChats = async (uid: string): Promise<Chat[]> => {
-  const firestore = requireDb();
-
   try {
-    const chatsQuery = query(
-      collection(firestore, 'chats'),
-      where('participants', 'array-contains', uid),
-      orderBy('updatedAt', 'desc'),
-    );
-    const snapshot = await getDocs(chatsQuery);
+    const snapshot = await getDocs(buildUserChatsQuery(uid));
 
     return snapshot.docs.map((docSnapshot) => mapChat(docSnapshot.id, docSnapshot.data()));
   } catch (error) {
@@ -250,15 +251,8 @@ export const getUserChats = async (uid: string): Promise<Chat[]> => {
 };
 
 export const listenUserChats = (uid: string, callback: (chats: Chat[]) => void, onError?: (error: Error) => void) => {
-  const firestore = requireDb();
-  const chatsQuery = query(
-    collection(firestore, 'chats'),
-    where('participants', 'array-contains', uid),
-    orderBy('updatedAt', 'desc'),
-  );
-
   return onSnapshot(
-    chatsQuery,
+    buildUserChatsQuery(uid),
     (snapshot) => {
       const chats = snapshot.docs.map((docSnapshot) => mapChat(docSnapshot.id, docSnapshot.data()));
       callback(chats);
