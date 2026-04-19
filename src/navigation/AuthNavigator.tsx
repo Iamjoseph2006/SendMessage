@@ -44,6 +44,7 @@ export default function AuthNavigator() {
       <Stack.Screen name="status/create" options={{ headerBackTitle: 'Estados' }} />
       <Stack.Screen name="status/my" options={{ headerBackTitle: 'Estados' }} />
       <Stack.Screen name="status/[statusId]" options={{ headerBackTitle: 'Mi estado' }} />
+      <Stack.Screen name="status/viewer" options={{ headerShown: false }} />
     </Stack>
   );
 }

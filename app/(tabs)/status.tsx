@@ -1,17 +1,19 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/features/auth/hooks/useAuth';
-import { StatusItem, getStatuses } from '@/src/features/status/services/statusService';
+import { StatusItem, listenStatuses } from '@/src/features/status/services/statusService';
 import { buildMyStatusSubtitle, getRelativeStatusTime, getStatusPreview, getUserInitial } from '@/src/features/status/utils/statusFormat';
 import { getUsersByUids } from '@/src/features/users/services/userService';
 import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
 
-type ContactStatusRow = StatusItem & {
+type ContactStatusGroup = {
+  userId: string;
   ownerName: string;
+  latest: StatusItem;
+  unreadCount: number;
 };
 
 export default function StatusScreen() {
@@ -24,50 +26,46 @@ export default function StatusScreen() {
   const [error, setError] = useState<string | null>(null);
   const insets = useSafeAreaInsets();
 
-  const loadStatuses = useCallback(async () => {
-    try {
-      setError(null);
-      const nextStatuses = await getStatuses();
-      setStatuses(nextStatuses);
-      const userIds = [...new Set(nextStatuses.map((item) => item.userId).filter(Boolean))];
-      const users = await getUsersByUids(userIds);
-      const map = users.reduce<Record<string, string>>((acc, item) => {
-        acc[item.uid] = item.name;
-        return acc;
-      }, {});
-      setUsersById(map);
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'No se pudieron cargar los estados.');
-    }
-  }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      loadStatuses();
-    }, [loadStatuses]),
-  );
-
-  const { myStatuses, contactStatuses } = useMemo(() => {
-    const grouped = statuses.reduce(
-      (acc, item) => {
-        if (item.userId === user?.uid) {
-          acc.myStatuses.push(item);
-        } else {
-          acc.contactStatuses.push({
-            ...item,
-            ownerName: usersById[item.userId] ?? 'Usuario',
-          });
-        }
-
-        return acc;
+  useEffect(() => {
+    const unsubscribe = listenStatuses(
+      async (nextStatuses) => {
+        setError(null);
+        setStatuses(nextStatuses);
+        const userIds = [...new Set(nextStatuses.map((item) => item.userId).filter(Boolean))];
+        const users = await getUsersByUids(userIds);
+        setUsersById(
+          users.reduce<Record<string, string>>((acc, item) => {
+            acc[item.uid] = item.name;
+            return acc;
+          }, {}),
+        );
       },
-      {
-        myStatuses: [] as StatusItem[],
-        contactStatuses: [] as ContactStatusRow[],
-      },
+      (listenError) => setError(listenError.message),
     );
 
-    return grouped;
+    return unsubscribe;
+  }, []);
+
+  const { myStatuses, contactGroups } = useMemo(() => {
+    const mine = statuses.filter((item) => item.userId === user?.uid);
+    const grouped = new Map<string, StatusItem[]>();
+
+    statuses
+      .filter((item) => item.userId !== user?.uid)
+      .forEach((item) => {
+        const row = grouped.get(item.userId) ?? [];
+        row.push(item);
+        grouped.set(item.userId, row);
+      });
+
+    const rows: ContactStatusGroup[] = Array.from(grouped.entries()).map(([userId, items]) => ({
+      userId,
+      ownerName: usersById[userId] ?? 'Usuario',
+      latest: items[0],
+      unreadCount: items.filter((status) => !(status.viewedBy ?? []).includes(user?.uid ?? '')).length,
+    }));
+
+    return { myStatuses: mine, contactGroups: rows };
   }, [statuses, user?.uid, usersById]);
 
   const myStateSubtitle = useMemo(() => buildMyStatusSubtitle(myStatuses), [myStatuses]);
@@ -106,20 +104,20 @@ export default function StatusScreen() {
           <Text style={[styles.sectionTitle, { color: palette.textSecondary }]}>Recientes</Text>
         </View>
 
-        {contactStatuses.length ? (
-          contactStatuses.map((status) => (
-            <View key={status.id} style={styles.row}>
-              <View style={styles.storyRing} />
+        {contactGroups.length ? (
+          contactGroups.map((group) => (
+            <Pressable key={group.userId} style={styles.row} onPress={() => router.push({ pathname: '/status/viewer', params: { userId: group.userId } })}>
+              <View style={[styles.storyRing, group.unreadCount ? styles.storyRingUnread : styles.storyRingRead]} />
               <View style={styles.statusTextWrap}>
-                <Text style={[styles.title, { color: palette.textPrimary }]}>{status.ownerName}</Text>
+                <Text style={[styles.title, { color: palette.textPrimary }]}>{group.ownerName}</Text>
                 <Text style={[styles.subtitle, { color: palette.textSecondary }]}>
-                  {getStatusPreview(status)} · {getRelativeStatusTime(status)}
+                  {getStatusPreview(group.latest)} · {getRelativeStatusTime(group.latest)}
                 </Text>
               </View>
-            </View>
+            </Pressable>
           ))
         ) : (
-          <View style={[styles.emptyBlock, { borderColor: palette.border, backgroundColor: palette.surface }]}>
+          <View style={[styles.emptyBlock, { borderColor: palette.border, backgroundColor: palette.surface }]}> 
             <Text style={[styles.emptyText, { color: palette.textSecondary }]}>Aún no hay estados recientes de tus contactos.</Text>
           </View>
         )}
@@ -170,7 +168,9 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 13, fontWeight: '700', letterSpacing: 0.3, textTransform: 'uppercase' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   statusTextWrap: { flex: 1 },
-  storyRing: { width: 46, height: 46, borderRadius: 23, borderWidth: 3, borderColor: '#1F7AE0', backgroundColor: '#F5FAFF' },
+  storyRing: { width: 46, height: 46, borderRadius: 23, borderWidth: 3, backgroundColor: '#F5FAFF' },
+  storyRingUnread: { borderColor: '#1F7AE0' },
+  storyRingRead: { borderColor: '#A9B9CA' },
   title: { color: '#22354D', fontWeight: '700', fontSize: 16 },
   subtitle: { color: '#6A7D95', marginTop: 1 },
   emptyBlock: { borderWidth: 1, borderRadius: 12, padding: 14 },
