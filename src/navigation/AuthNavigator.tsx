@@ -38,6 +38,7 @@ export default function AuthNavigator() {
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="chat/[chatId]" options={{ headerShown: false }} />
       <Stack.Screen name="profile/[section]" options={{ headerBackTitle: 'Perfil' }} />
+      <Stack.Screen name="status/create" options={{ headerBackTitle: 'Estados' }} />
     </Stack>
   );
 }

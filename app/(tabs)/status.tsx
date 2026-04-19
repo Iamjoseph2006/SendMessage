@@ -1,18 +1,19 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/features/auth/hooks/useAuth';
-import { getStatuses, createStatus, StatusItem } from '@/src/features/status/services/statusService';
+import { getStatuses, StatusItem } from '@/src/features/status/services/statusService';
 import { getUsersByUids } from '@/src/features/users/services/userService';
 import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
 
 export default function StatusScreen() {
   const { user } = useAuth();
+  const router = useRouter();
   const { isDark } = useAppTheme();
   const palette = isDark ? darkPalette : lightPalette;
-  const [showCreator, setShowCreator] = useState(false);
-  const [content, setContent] = useState('');
   const [statuses, setStatuses] = useState<StatusItem[]>([]);
   const [usersById, setUsersById] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -33,25 +34,11 @@ export default function StatusScreen() {
     }
   };
 
-  useEffect(() => {
-    loadStatuses();
-  }, []);
-
-  const onCreateStatus = async () => {
-    if (!user?.uid) {
-      return;
-    }
-
-    try {
-      setError(null);
-      await createStatus(user.uid, content);
-      setContent('');
-      setShowCreator(false);
-      await loadStatuses();
-    } catch (createError) {
-      setError(createError instanceof Error ? createError.message : 'No se pudo crear el estado.');
-    }
-  };
+  useFocusEffect(
+    useCallback(() => {
+      loadStatuses();
+    }, []),
+  );
 
   const rows = useMemo(
     () =>
@@ -70,7 +57,9 @@ export default function StatusScreen() {
         <Text style={[styles.headerTitle, { color: palette.textPrimary }]}>Estados</Text>
       </View>
       <ScrollView contentContainerStyle={styles.container}>
-        <Pressable style={[styles.addStatus, { borderColor: palette.border, backgroundColor: palette.surface }]} onPress={() => setShowCreator(true)}>
+        <Pressable
+          style={[styles.addStatus, { borderColor: palette.border, backgroundColor: palette.surface }]}
+          onPress={() => router.push('/status/create')}>
           <View style={[styles.avatar, { backgroundColor: isDark ? '#21314A' : '#EAF3FF' }]}>
             <Ionicons name="add" size={22} color={palette.accent} />
           </View>
@@ -92,28 +81,6 @@ export default function StatusScreen() {
         ))}
         {error ? <Text style={styles.error}>{error}</Text> : null}
       </ScrollView>
-
-      <Modal visible={showCreator} transparent animationType="slide" onRequestClose={() => setShowCreator(false)}>
-        <View style={styles.modalBackdrop}>
-          <View style={[styles.modalCard, { backgroundColor: palette.surface }]}>
-            <Text style={[styles.modalTitle, { color: palette.textPrimary }]}>Nuevo estado</Text>
-            <TextInput
-              style={[styles.captionInput, { borderColor: palette.border, color: palette.textPrimary }]}
-              value={content}
-              onChangeText={setContent}
-              placeholder="Escribe un estado..."
-              placeholderTextColor="#8C9DB0"
-              multiline
-            />
-            <Pressable style={styles.publishButton} onPress={onCreateStatus}>
-              <Text style={styles.publishText}>Publicar</Text>
-            </Pressable>
-            <Pressable style={styles.cancelButton} onPress={() => setShowCreator(false)}>
-              <Text style={styles.cancelText}>Cancelar</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -139,35 +106,5 @@ const styles = StyleSheet.create({
   storyRing: { width: 46, height: 46, borderRadius: 23, borderWidth: 3, borderColor: '#1F7AE0', backgroundColor: '#F5FAFF' },
   title: { color: '#22354D', fontWeight: '700', fontSize: 16 },
   subtitle: { color: '#6A7D95', marginTop: 1 },
-  modalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(24,36,53,0.4)' },
-  modalCard: {
-    backgroundColor: '#FFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 24,
-    gap: 12,
-  },
-  modalTitle: { fontSize: 17, fontWeight: '700', color: '#22354D' },
-  captionInput: {
-    minHeight: 86,
-    borderWidth: 1,
-    borderColor: '#E6EBF2',
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 15,
-    textAlignVertical: 'top',
-  },
-  publishButton: {
-    backgroundColor: '#1F7AE0',
-    borderRadius: 10,
-    alignItems: 'center',
-    paddingVertical: 10,
-  },
-  publishText: { color: '#FFF', fontWeight: '700' },
-  cancelButton: { alignItems: 'center', paddingVertical: 10 },
-  cancelText: { color: '#1F7AE0', fontWeight: '700' },
   error: { color: '#D93025' },
 });
