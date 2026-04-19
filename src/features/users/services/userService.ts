@@ -1,7 +1,7 @@
 import { User as FirebaseUser } from 'firebase/auth';
 import { FirestoreError, Timestamp, collection, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
 import { auth, db, firebaseConfig } from '@/src/config/firebase';
-import { mapFirebaseErrorToSpanish } from '@/src/config/firebaseErrors';
+import { isPermissionDeniedFirestoreError, mapFirebaseErrorToSpanish } from '@/src/config/firebaseErrors';
 
 export type UserProfile = {
   uid: string;
@@ -27,6 +27,11 @@ const mapFirestoreError = (error: unknown): Error => {
     `[userService] Error Firestore code=${firestoreError?.code ?? 'unknown'} message=${firestoreError?.message ?? 'N/D'}`,
     error,
   );
+  if (isPermissionDeniedFirestoreError(error)) {
+    console.error(
+      '[userService] Diagnóstico: Firestore rechazó la operación por reglas de seguridad (permission-denied). No es un problema de red ni de configuración del SDK.',
+    );
+  }
 
   if (firestoreError?.code === 'failed-precondition') {
     return new Error('Falta un índice en Firestore para completar la consulta.');
@@ -113,6 +118,11 @@ const autoRepairUserDocument = async (
       `[userService] Falló autoreparación users/${documentId}. razón=${reason} code=${firestoreError?.code ?? 'unknown'} message=${firestoreError?.message ?? 'N/D'}`,
       error,
     );
+    if (isPermissionDeniedFirestoreError(error)) {
+      console.error(
+        `[userService] Autorreparación bloqueada por reglas de Firestore en users/${documentId} (permission-denied).`,
+      );
+    }
   } finally {
     repairInFlight.delete(documentId);
   }
@@ -191,16 +201,29 @@ const ensureAuthenticatedUserDoc = async (firebaseUser: FirebaseUser): Promise<v
   const firestore = requireDb();
   const normalizedEmail = firebaseUser.email?.trim() ?? '';
   const normalizedName = firebaseUser.displayName?.trim() || normalizedEmail || 'Usuario';
+  const userRef = doc(firestore, 'users', firebaseUser.uid);
+  let existingCreatedAt: unknown = null;
+
+  try {
+    const existingSnapshot = await getDoc(userRef);
+    existingCreatedAt = existingSnapshot.exists() ? existingSnapshot.data()?.createdAt : null;
+  } catch (readError) {
+    const firestoreError = readError as Partial<FirestoreError>;
+    console.warn(
+      `[userService] No se pudo leer users/${firebaseUser.uid} antes de autorreparar. code=${firestoreError?.code ?? 'unknown'}.`,
+      readError,
+    );
+  }
 
   try {
     await setDoc(
-      doc(firestore, 'users', firebaseUser.uid),
+      userRef,
       {
         uid: firebaseUser.uid,
         email: normalizedEmail,
         name: normalizedName,
         updatedAt: serverTimestamp(),
-        createdAt: serverTimestamp(),
+        createdAt: existingCreatedAt ?? serverTimestamp(),
         online: true,
       },
       { merge: true },
@@ -213,6 +236,11 @@ const ensureAuthenticatedUserDoc = async (firebaseUser: FirebaseUser): Promise<v
       `[userService] Falló autorreparación users/${firebaseUser.uid}. code=${firestoreError?.code ?? 'unknown'} message=${firestoreError?.message ?? 'N/D'}`,
       error,
     );
+    if (isPermissionDeniedFirestoreError(error)) {
+      console.error(
+        `[userService] No se puede crear/reparar users/${firebaseUser.uid} por reglas de Firestore (permission-denied).`,
+      );
+    }
     throw error;
   }
 };
