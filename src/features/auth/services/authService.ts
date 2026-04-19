@@ -1,5 +1,5 @@
 import { AuthError, User, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile } from 'firebase/auth';
-import { FirestoreError, doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import { FirestoreError, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { auth, db, firebaseConfig, firebaseConfigError } from '@/src/config/firebase';
 import { mapFirebaseErrorToSpanish } from '@/src/config/firebaseErrors';
 
@@ -194,37 +194,28 @@ export const ensureUserDocument = async (uid: string, payload: EnsureUserProfile
     throw new Error('No se puede persistir users/{uid} sin uid y email válidos.');
   }
 
+  let existingCreatedAt: unknown = null;
+
   try {
-    logProfileWriteContext(normalizedProfile.uid, 'ensureUserDocument:updateDoc');
-    await updateDoc(userRef, {
-      email: normalizedProfile.email,
-      name: normalizedProfile.name,
-      uid: normalizedProfile.uid,
-      online: true,
-      updatedAt: serverTimestamp(),
-    });
-    console.log(`[authService] Perfil users/${normalizedProfile.uid} actualizado en Firestore.`);
+    const existingSnapshot = await getDoc(userRef);
+    existingCreatedAt = existingSnapshot.exists() ? existingSnapshot.data()?.createdAt : null;
   } catch (error) {
     const firestoreError = error as Partial<FirestoreError> & { message?: string };
-    const code = firestoreError.code ?? 'unknown';
     console.warn(
-      `[authService] updateDoc users/${normalizedProfile.uid} falló (code=${code}). Se intentará crear/reparar documento con setDoc.`,
+      `[authService] No se pudo leer users/${normalizedProfile.uid} antes de sincronizar (code=${firestoreError.code ?? 'unknown'}). Se intentará setDoc directo.`,
       error,
     );
-
-    if (code && code !== 'not-found') {
-      throw error;
-    }
   }
 
   try {
+    logProfileWriteContext(normalizedProfile.uid, 'ensureUserDocument:setDoc');
     await setDoc(
       userRef,
       {
         uid: normalizedProfile.uid,
         email: normalizedProfile.email,
         name: normalizedProfile.name,
-        createdAt: serverTimestamp(),
+        createdAt: existingCreatedAt ?? serverTimestamp(),
         updatedAt: serverTimestamp(),
         online: true,
       },
