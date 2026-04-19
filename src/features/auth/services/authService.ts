@@ -1,7 +1,7 @@
 import { AuthError, User, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile } from 'firebase/auth';
 import { FirestoreError, doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { auth, db, firebaseConfig, firebaseConfigError } from '@/src/config/firebase';
-import { mapFirebaseErrorToSpanish } from '@/src/config/firebaseErrors';
+import { isPermissionDeniedFirestoreError, mapFirebaseErrorToSpanish } from '@/src/config/firebaseErrors';
 
 export type AppUser = {
   uid: string;
@@ -213,6 +213,11 @@ export const ensureUserDocument = async (uid: string, payload: EnsureUserProfile
       `[authService] No se pudo leer users/${normalizedProfile.uid} antes de sincronizar (code=${firestoreError.code ?? 'unknown'}). Se intentará setDoc directo.`,
       error,
     );
+    if (isPermissionDeniedFirestoreError(error)) {
+      console.error(
+        `[authService] Lectura users/${normalizedProfile.uid} bloqueada por reglas de Firestore (permission-denied). No es error de red ni de SDK.`,
+      );
+    }
   }
 
   try {
@@ -237,6 +242,11 @@ export const ensureUserDocument = async (uid: string, payload: EnsureUserProfile
       `[authService] Error creando/reparando users/${normalizedProfile.uid} (code=${firestoreError.code ?? 'unknown'}).`,
       error,
     );
+    if (isPermissionDeniedFirestoreError(error)) {
+      console.error(
+        `[authService] Escritura users/${normalizedProfile.uid} bloqueada por reglas de Firestore (permission-denied). No es error de red ni de SDK.`,
+      );
+    }
     throw error;
   }
 
@@ -260,6 +270,11 @@ export const ensureUserDocument = async (uid: string, payload: EnsureUserProfile
         `[authService] Verificación users/${normalizedProfile.uid} omitida por modo offline (code=${firestoreError.code ?? 'unknown'}). La escritura setDoc quedó en cola local.`,
       );
       return;
+    }
+    if (isPermissionDeniedFirestoreError(verificationError)) {
+      console.error(
+        `[authService] Verificación users/${normalizedProfile.uid} bloqueada por reglas de Firestore (permission-denied).`,
+      );
     }
     console.error(
       `[authService] Error verificando users/${normalizedProfile.uid} (code=${firestoreError.code ?? 'unknown'}).`,

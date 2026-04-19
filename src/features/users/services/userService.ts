@@ -1,7 +1,7 @@
 import { User as FirebaseUser } from 'firebase/auth';
 import { FirestoreError, Timestamp, collection, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
 import { auth, db, firebaseConfig } from '@/src/config/firebase';
-import { mapFirebaseErrorToSpanish } from '@/src/config/firebaseErrors';
+import { isPermissionDeniedFirestoreError, mapFirebaseErrorToSpanish } from '@/src/config/firebaseErrors';
 
 export type UserProfile = {
   uid: string;
@@ -27,6 +27,11 @@ const mapFirestoreError = (error: unknown): Error => {
     `[userService] Error Firestore code=${firestoreError?.code ?? 'unknown'} message=${firestoreError?.message ?? 'N/D'}`,
     error,
   );
+  if (isPermissionDeniedFirestoreError(error)) {
+    console.error(
+      '[userService] Diagnóstico: Firestore rechazó la operación por reglas de seguridad (permission-denied). No es un problema de red ni de configuración del SDK.',
+    );
+  }
 
   if (firestoreError?.code === 'failed-precondition') {
     return new Error('Falta un índice en Firestore para completar la consulta.');
@@ -113,6 +118,11 @@ const autoRepairUserDocument = async (
       `[userService] Falló autoreparación users/${documentId}. razón=${reason} code=${firestoreError?.code ?? 'unknown'} message=${firestoreError?.message ?? 'N/D'}`,
       error,
     );
+    if (isPermissionDeniedFirestoreError(error)) {
+      console.error(
+        `[userService] Autorreparación bloqueada por reglas de Firestore en users/${documentId} (permission-denied).`,
+      );
+    }
   } finally {
     repairInFlight.delete(documentId);
   }
@@ -213,6 +223,11 @@ const ensureAuthenticatedUserDoc = async (firebaseUser: FirebaseUser): Promise<v
       `[userService] Falló autorreparación users/${firebaseUser.uid}. code=${firestoreError?.code ?? 'unknown'} message=${firestoreError?.message ?? 'N/D'}`,
       error,
     );
+    if (isPermissionDeniedFirestoreError(error)) {
+      console.error(
+        `[userService] No se puede crear/reparar users/${firebaseUser.uid} por reglas de Firestore (permission-denied).`,
+      );
+    }
     throw error;
   }
 };
