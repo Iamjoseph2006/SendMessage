@@ -3,7 +3,6 @@ import { Audio } from 'expo-av';
 import * as Location from 'expo-location';
 import { Stack, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import DocumentPicker, { types } from 'react-native-document-picker';
 import {
   ActivityIndicator,
   Image,
@@ -53,18 +52,7 @@ export default function CreateStatusScreen() {
   );
 
   const onPickImage = async () => {
-    setError(null);
-
-    try {
-      const file = await DocumentPicker.pickSingle({ type: [types.images], copyTo: 'cachesDirectory' });
-      setSelectedImageUri(file.fileCopyUri ?? file.uri);
-    } catch (pickError) {
-      if (DocumentPicker.isCancel(pickError)) {
-        return;
-      }
-
-      setError('No se pudo abrir la galería del celular.');
-    }
+    setError('La selección de imágenes no está disponible en Expo Go para esta versión.');
   };
 
   const onPickLocation = async () => {
