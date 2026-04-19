@@ -1,5 +1,5 @@
 import { AuthError, User, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile } from 'firebase/auth';
-import { doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import { FirestoreError, doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { auth, db, firebaseConfigError } from '@/src/config/firebase';
 import { mapFirebaseErrorToSpanish } from '@/src/config/firebaseErrors';
 
@@ -111,7 +111,7 @@ const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, message: s
 
 
 const isNonBlockingProfileSyncError = (error: unknown): boolean => {
-  const firebaseError = error as Partial<AuthError> & { message?: string; code?: string };
+  const firebaseError = error as Partial<AuthError & FirestoreError> & { message?: string; code?: string };
   const normalizedCode = firebaseError?.code?.replace(/^auth\//, '') ?? firebaseError?.code ?? '';
   const normalizedMessage = firebaseError?.message?.toLowerCase() ?? '';
 
@@ -121,17 +121,6 @@ const isNonBlockingProfileSyncError = (error: unknown): boolean => {
     || normalizedMessage.includes('client is offline')
     || normalizedMessage.includes('network-request-failed')
   );
-};
-
-const hasMissingRequiredFields = (
-  source: Record<string, unknown> | undefined,
-  uid: string,
-): boolean => {
-  const sourceUid = typeof source?.uid === 'string' ? source.uid.trim() : '';
-  const sourceEmail = typeof source?.email === 'string' ? source.email.trim() : '';
-  const sourceName = typeof source?.name === 'string' ? source.name.trim() : '';
-
-  return !sourceUid || sourceUid !== uid || !sourceEmail || !sourceName;
 };
 
 const syncUserProfileSafely = async (firebaseUser: User): Promise<void> => {
@@ -159,9 +148,31 @@ export const ensureUserDocument = async (uid: string, payload: EnsureUserProfile
   const firestoreClient = getFirestoreClient();
   const normalizedProfile = normalizeProfilePayload(uid, payload);
   const userRef = doc(firestoreClient, 'users', normalizedProfile.uid);
-  const userSnapshot = await getDoc(userRef);
 
-  if (!userSnapshot.exists()) {
+  try {
+    await updateDoc(userRef, {
+      email: normalizedProfile.email,
+      name: normalizedProfile.name,
+      uid: normalizedProfile.uid,
+      online: true,
+      updatedAt: serverTimestamp(),
+    });
+    console.log(`[authService] Perfil users/${normalizedProfile.uid} actualizado en Firestore.`);
+    return;
+  } catch (error) {
+    const firestoreError = error as Partial<FirestoreError> & { message?: string };
+    const code = firestoreError.code ?? 'unknown';
+    console.warn(
+      `[authService] updateDoc users/${normalizedProfile.uid} falló (code=${code}). Se intentará crear/reparar documento con setDoc.`,
+      error,
+    );
+
+    if (code && code !== 'not-found') {
+      throw error;
+    }
+  }
+
+  try {
     await setDoc(userRef, {
       uid: normalizedProfile.uid,
       email: normalizedProfile.email,
@@ -170,40 +181,15 @@ export const ensureUserDocument = async (uid: string, payload: EnsureUserProfile
       updatedAt: serverTimestamp(),
       online: true,
     });
-    console.log(`[authService] Perfil users/${normalizedProfile.uid} creado desde Auth.`);
-    return;
-  }
-
-  const currentData = userSnapshot.data();
-  const requiresRepair = hasMissingRequiredFields(currentData, normalizedProfile.uid);
-
-  if (requiresRepair) {
-    await setDoc(
-      userRef,
-      {
-        uid: normalizedProfile.uid,
-        email: normalizedProfile.email,
-        name: normalizedProfile.name,
-        online: Boolean(currentData?.online),
-        createdAt: currentData?.createdAt ?? serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      },
-      { merge: true },
+    console.log(`[authService] Perfil users/${normalizedProfile.uid} creado/reparado en Firestore.`);
+  } catch (error) {
+    const firestoreError = error as Partial<FirestoreError> & { message?: string };
+    console.error(
+      `[authService] Error creando/reparando users/${normalizedProfile.uid} (code=${firestoreError.code ?? 'unknown'}).`,
+      error,
     );
-    console.warn(`[authService] Perfil users/${normalizedProfile.uid} reparado por campos faltantes.`);
-    return;
+    throw error;
   }
-
-  const currentName = typeof currentData?.name === 'string' ? currentData.name.trim() : '';
-  const currentEmail = typeof currentData?.email === 'string' ? currentData.email.trim() : '';
-
-  await updateDoc(userRef, {
-    ...(currentEmail !== normalizedProfile.email ? { email: normalizedProfile.email } : {}),
-    ...(currentName ? {} : { name: normalizedProfile.name }),
-    ...(currentData?.uid ? {} : { uid: normalizedProfile.uid }),
-    online: true,
-    updatedAt: serverTimestamp(),
-  }).catch(() => undefined);
 };
 
 export const registerUser = async (email: string, password: string, name: string): Promise<AppUser> => {
