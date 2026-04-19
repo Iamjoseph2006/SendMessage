@@ -7,6 +7,7 @@ import { useAuth } from '@/src/features/auth/hooks/useAuth';
 import { listenProfile } from '@/src/features/profile/services/profileService';
 import { UserProfile } from '@/src/features/users/services/userService';
 import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
+import { getAvatarInitials } from '@/src/shared/utils/avatar';
 
 export default function AccountScreen() {
   const { user } = useAuth();
@@ -60,7 +61,7 @@ export default function AccountScreen() {
         <View style={[styles.headerCard, { borderColor: palette.border, backgroundColor: palette.surface }]}> 
           <View style={[styles.avatar, { backgroundColor: isDark ? '#21314A' : '#D9EAFF' }]}> 
             <Text style={[styles.avatarText, { color: palette.textPrimary }]}> 
-              {(rows[0].value || 'U').charAt(0).toUpperCase()}
+              {getAvatarInitials(rows[0].value)}
             </Text>
           </View>
           <Text style={[styles.name, { color: palette.textPrimary }]}>{rows[0].value}</Text>

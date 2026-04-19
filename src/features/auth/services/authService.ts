@@ -78,8 +78,9 @@ const choosePersistedName = (existingName: unknown, fallbackPayloadName: string,
   const currentName = toTrimmedString(existingName);
   const incomingName = toTrimmedString(fallbackPayloadName);
   const normalizedEmail = toTrimmedString(fallbackEmail);
+  const currentLooksLikeEmail = currentName && normalizedEmail && currentName.toLowerCase() === normalizedEmail.toLowerCase();
 
-  if (currentName) {
+  if (currentName && !currentLooksLikeEmail) {
     return currentName;
   }
 
@@ -87,7 +88,7 @@ const choosePersistedName = (existingName: unknown, fallbackPayloadName: string,
     return incomingName;
   }
 
-  return normalizedEmail || 'Usuario';
+  return currentName || normalizedEmail || 'Usuario';
 };
 
 const authErrorMessages: Record<string, string> = {

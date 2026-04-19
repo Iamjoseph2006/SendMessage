@@ -8,6 +8,7 @@ import { Chat } from '@/src/features/chat/services/chatService';
 import { useUserChats } from '@/src/features/chat/hooks/useUserChats';
 import { useUsersDirectory } from '@/src/features/users/hooks/useUsersDirectory';
 import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
+import { getAvatarInitials } from '@/src/shared/utils/avatar';
 
 export default function ChatsScreen() {
   const { user } = useAuth();
@@ -94,7 +95,7 @@ export default function ChatsScreen() {
         renderItem={({ item }) => (
           <Pressable style={styles.chatRow} onPress={() => router.push(`/chat/${item.id}`)}>
             <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{item.title.charAt(0).toUpperCase()}</Text>
+              <Text style={styles.avatarText}>{getAvatarInitials(item.title)}</Text>
             </View>
             <View style={styles.textWrap}>
               <Text style={[styles.name, { color: palette.textPrimary }]}>{item.title}</Text>

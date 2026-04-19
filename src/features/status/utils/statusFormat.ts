@@ -43,16 +43,6 @@ export const buildMyStatusSubtitle = (myStatuses: StatusItem[]): string => {
   return `${myStatuses.length} actualizaciones · ${getRelativeStatusTime(myStatuses[0])}`;
 };
 
-export const getUserInitial = (value?: string | null): string => {
-  const normalized = value?.trim();
-
-  if (!normalized) {
-    return '?';
-  }
-
-  return normalized[0]?.toUpperCase() ?? '?';
-};
-
 export const getStatusPreview = (status: StatusItem): string => {
   const parts: string[] = [];
 
