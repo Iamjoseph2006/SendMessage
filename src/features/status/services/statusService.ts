@@ -1,5 +1,6 @@
 import { FirestoreError, Timestamp, addDoc, collection, getDocs, orderBy, query, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/src/config/firebase';
+import { mapFirebaseErrorToSpanish } from '@/src/config/firebaseErrors';
 
 export type StatusItem = {
   id: string;
@@ -19,19 +20,11 @@ const requireDb = () => {
 const mapFirestoreError = (error: unknown): Error => {
   const firestoreError = error as Partial<FirestoreError>;
 
-  if (firestoreError?.code === 'permission-denied') {
-    return new Error('No tienes permisos para publicar o leer estados. Revisa firestore.rules.');
-  }
-
   if (firestoreError?.code === 'failed-precondition') {
     return new Error('Falta un índice para consultar estados.');
   }
 
-  if (error instanceof Error) {
-    return error;
-  }
-
-  return new Error('No se pudo completar la operación de estados.');
+  return mapFirebaseErrorToSpanish(error, 'No se pudo completar la operación de estados.');
 };
 
 export const createStatus = async (userId: string, content: string): Promise<string> => {
