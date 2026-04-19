@@ -28,6 +28,8 @@ export default function RegisterScreen({ onRegister, error }: RegisterScreenProp
     setSubmitting(true);
     try {
       await onRegister(name, email, password);
+    } catch {
+      // El error se maneja desde el hook useAuth y se muestra vía prop `error`.
     } finally {
       setSubmitting(false);
     }
