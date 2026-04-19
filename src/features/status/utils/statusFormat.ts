@@ -1,0 +1,54 @@
+import { StatusItem } from '@/src/features/status/services/statusService';
+
+const MINUTE = 60_000;
+const HOUR = 60 * MINUTE;
+const DAY = 24 * HOUR;
+
+export const getRelativeStatusTime = (status: StatusItem): string => {
+  const createdAtDate = status.createdAt?.toDate();
+
+  if (!createdAtDate) {
+    return 'Hace un momento';
+  }
+
+  const elapsed = Date.now() - createdAtDate.getTime();
+
+  if (elapsed < MINUTE) {
+    return 'Ahora mismo';
+  }
+
+  if (elapsed < HOUR) {
+    const minutes = Math.max(1, Math.floor(elapsed / MINUTE));
+    return `Hace ${minutes} min`;
+  }
+
+  if (elapsed < DAY) {
+    const hours = Math.max(1, Math.floor(elapsed / HOUR));
+    return `Hace ${hours} h`;
+  }
+
+  const days = Math.max(1, Math.floor(elapsed / DAY));
+  return `Hace ${days} d`;
+};
+
+export const buildMyStatusSubtitle = (myStatuses: StatusItem[]): string => {
+  if (!myStatuses.length) {
+    return 'Toca para añadir una actualización';
+  }
+
+  if (myStatuses.length === 1) {
+    return `1 actualización · ${getRelativeStatusTime(myStatuses[0])}`;
+  }
+
+  return `${myStatuses.length} actualizaciones · ${getRelativeStatusTime(myStatuses[0])}`;
+};
+
+export const getUserInitial = (value?: string | null): string => {
+  const normalized = value?.trim();
+
+  if (!normalized) {
+    return '?';
+  }
+
+  return normalized[0]?.toUpperCase() ?? '?';
+};
