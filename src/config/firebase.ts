@@ -74,13 +74,13 @@ if (!isFirebaseConfigured) {
 
   if (isAndroidAppId) {
     console.warn(
-      `[firebase] EXPO_PUBLIC_FIREBASE_APP_ID parece de Android (${firebaseConfig.appId}). Para Expo/React Native con SDK Web de Firebase usa el appId de una Web App del mismo proyecto.`,
+      `[firebase] EXPO_PUBLIC_FIREBASE_APP_ID parece de Android (${firebaseConfig.appId}). Para Expo/React Native con SDK Web de Firebase usa el appId de una Web App del mismo proyecto. Si dos dispositivos usan appId/proyecto distintos, users/{uid} se guardará en backends diferentes y el directorio no llegará a docs_crudos=2.`,
     );
   }
 
   if (!hasAuthDomain) {
     console.warn(
-      '[firebase] EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN está vacío. Aunque no siempre bloquea en React Native, se recomienda incluirlo desde la Web App de Firebase.',
+      '[firebase] EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN está vacío. Aunque no siempre bloquea en React Native, se recomienda incluirlo desde la Web App de Firebase para evitar inconsistencias de autenticación entre dispositivos.',
     );
   }
 }

@@ -1,6 +1,6 @@
 import { AuthError, User, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile } from 'firebase/auth';
-import { FirestoreError, doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
-import { auth, db, firebaseConfigError } from '@/src/config/firebase';
+import { FirestoreError, doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import { auth, db, firebaseConfig, firebaseConfigError } from '@/src/config/firebase';
 import { mapFirebaseErrorToSpanish } from '@/src/config/firebaseErrors';
 
 export type AppUser = {
@@ -134,8 +134,15 @@ const wait = (ms: number) => new Promise<void>((resolve) => {
   setTimeout(resolve, ms);
 });
 
+const logProfileWriteContext = (uid: string, origin: string) => {
+  console.log(
+    `[authService] Contexto sync users/${uid}. origen=${origin} projectId=${firebaseConfig.projectId || 'N/D'} appId=${firebaseConfig.appId || 'N/D'} authDomain=${firebaseConfig.authDomain || 'N/D'}.`,
+  );
+};
+
 const syncUserProfileSafely = async (firebaseUser: User): Promise<void> => {
   if (!firebaseUser.email) {
+    console.warn(`[authService] Sync users/${firebaseUser.uid} omitido: firebaseUser.email vacío.`);
     return;
   }
 
@@ -146,6 +153,7 @@ const syncUserProfileSafely = async (firebaseUser: User): Promise<void> => {
 
   for (let attempt = 1; attempt <= PROFILE_SYNC_MAX_RETRIES; attempt += 1) {
     try {
+      logProfileWriteContext(firebaseUser.uid, 'syncUserProfileSafely');
       console.log(`[authService] Intentando sincronizar users/${firebaseUser.uid} (intento ${attempt}/${PROFILE_SYNC_MAX_RETRIES}).`);
       await ensureUserDocument(firebaseUser.uid, profilePayload);
       return;
@@ -179,7 +187,15 @@ export const ensureUserDocument = async (uid: string, payload: EnsureUserProfile
   const normalizedProfile = normalizeProfilePayload(uid, payload);
   const userRef = doc(firestoreClient, 'users', normalizedProfile.uid);
 
+  if (!normalizedProfile.uid || !normalizedProfile.email) {
+    console.error(
+      `[authService] ensureUserDocument abortado. uid='${normalizedProfile.uid}' email='${normalizedProfile.email}'.`,
+    );
+    throw new Error('No se puede persistir users/{uid} sin uid y email válidos.');
+  }
+
   try {
+    logProfileWriteContext(normalizedProfile.uid, 'ensureUserDocument:updateDoc');
     await updateDoc(userRef, {
       email: normalizedProfile.email,
       name: normalizedProfile.name,
@@ -188,7 +204,6 @@ export const ensureUserDocument = async (uid: string, payload: EnsureUserProfile
       updatedAt: serverTimestamp(),
     });
     console.log(`[authService] Perfil users/${normalizedProfile.uid} actualizado en Firestore.`);
-    return;
   } catch (error) {
     const firestoreError = error as Partial<FirestoreError> & { message?: string };
     const code = firestoreError.code ?? 'unknown';
@@ -220,6 +235,28 @@ export const ensureUserDocument = async (uid: string, payload: EnsureUserProfile
     );
     throw error;
   }
+
+  try {
+    const persisted = await getDoc(userRef);
+    if (persisted.exists()) {
+      console.log(
+        `[authService] Verificación OK users/${normalizedProfile.uid}. persisted=true email=${normalizedProfile.email}.`,
+      );
+      return;
+    }
+
+    console.error(
+      `[authService] Verificación FALLÓ users/${normalizedProfile.uid}. persisted=false tras ensureUserDocument.`,
+    );
+    throw new Error(`No se pudo verificar la persistencia de users/${normalizedProfile.uid}.`);
+  } catch (verificationError) {
+    const firestoreError = verificationError as Partial<FirestoreError> & { message?: string };
+    console.error(
+      `[authService] Error verificando users/${normalizedProfile.uid} (code=${firestoreError.code ?? 'unknown'}).`,
+      verificationError,
+    );
+    throw verificationError;
+  }
 };
 
 export const registerUser = async (email: string, password: string, name: string): Promise<AppUser> => {
@@ -246,6 +283,7 @@ export const registerUser = async (email: string, password: string, name: string
     });
 
     try {
+      logProfileWriteContext(credentials.user.uid, 'registerUser:setDoc');
       await withTimeout(
         setDoc(doc(getFirestoreClient(), 'users', credentials.user.uid), {
           uid: credentials.user.uid,
@@ -258,6 +296,7 @@ export const registerUser = async (email: string, password: string, name: string
         FIRESTORE_PROFILE_WRITE_TIMEOUT_MS,
         'profile-write-timeout',
       );
+      console.log(`[authService] Registro creó users/${credentials.user.uid} correctamente.`);
     } catch (profileError) {
       if (!isNonBlockingProfileSyncError(profileError) && (profileError as Error)?.message !== 'profile-write-timeout') {
         throw profileError;
@@ -267,6 +306,13 @@ export const registerUser = async (email: string, password: string, name: string
         'El perfil del usuario no se pudo guardar durante el registro en el tiempo esperado. Se continuará con la sesión.',
         profileError,
       );
+      void ensureUserDocument(credentials.user.uid, profilePayload).catch((syncError) => {
+        const firestoreError = syncError as Partial<FirestoreError>;
+        console.error(
+          `[authService] Registro: falló persistencia diferida de users/${credentials.user.uid}. code=${firestoreError?.code ?? 'unknown'}.`,
+          syncError,
+        );
+      });
     }
 
     const mappedUser = await mapFirebaseUser(credentials.user);

@@ -173,12 +173,16 @@ const mapUsersFromSnapshot = (docs: { id: string; data: () => Record<string, unk
   const dedupedUsers = dedupeUsersByUid(users).sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email));
   const usersBeforeExclude = dedupedUsers.length;
   const finalUsers = dedupedUsers.filter((user) => user.uid !== currentUserUid);
+  const containsCurrentUser = currentUserUid ? dedupedUsers.some((user) => user.uid === currentUserUid) : false;
+  const knownUids = dedupedUsers.map((user) => user.uid).filter(Boolean);
 
   return {
     users: finalUsers,
     rawDocs: docs.length,
     validBeforeExclude: usersBeforeExclude,
     afterExclude: finalUsers.length,
+    containsCurrentUser,
+    knownUids,
   };
 };
 
@@ -244,8 +248,13 @@ export const listenUsers = (
     (snapshot) => {
       const result = mapUsersFromSnapshot(snapshot.docs, currentUserUid);
       console.log(
-        `[userService] onSnapshot users OK. docs_crudos=${result.rawDocs}, válidos_antes_excluir=${result.validBeforeExclude}, finales=${result.afterExclude}, excludeUid=${currentUserUid ?? 'none'}.`,
+        `[userService] onSnapshot users OK. docs_crudos=${result.rawDocs}, válidos_antes_excluir=${result.validBeforeExclude}, finales=${result.afterExclude}, excludeUid=${currentUserUid ?? 'none'}, uids=[${result.knownUids.join(',') || 'none'}].`,
       );
+      if (currentUserUid && result.containsCurrentUser && result.afterExclude === 0) {
+        console.warn(
+          `[userService] Solo existe users/${currentUserUid} tras excluir el usuario actual. Posible falta de persistencia del segundo usuario en colección users.`,
+        );
+      }
       callback(result.users);
     },
     (error) => {
@@ -286,8 +295,13 @@ export const getUsers = async (currentUserUid?: string): Promise<UserProfile[]> 
 
   const result = mapUsersFromSnapshot(snapshot.docs, currentUserUid);
   console.log(
-    `[userService] getUsers resumen. docs_crudos=${result.rawDocs}, válidos_antes_excluir=${result.validBeforeExclude}, finales=${result.afterExclude}, excludeUid=${currentUserUid ?? 'none'}.`,
+    `[userService] getUsers resumen. docs_crudos=${result.rawDocs}, válidos_antes_excluir=${result.validBeforeExclude}, finales=${result.afterExclude}, excludeUid=${currentUserUid ?? 'none'}, uids=[${result.knownUids.join(',') || 'none'}].`,
   );
+  if (currentUserUid && result.containsCurrentUser && result.afterExclude === 0) {
+    console.warn(
+      `[userService] getUsers detectó solo users/${currentUserUid}. El segundo usuario no aparece persistido aún en users.`,
+    );
+  }
   return result.users;
 };
 
