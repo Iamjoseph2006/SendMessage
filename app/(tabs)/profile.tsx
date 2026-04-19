@@ -30,6 +30,9 @@ export default function ProfileScreen() {
   const [savingName, setSavingName] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
+  const displayName = profile?.name?.trim() || user?.displayName?.trim() || profile?.email || user?.email || 'Sin nombre';
+  const displayEmail = profile?.email || user?.email || '';
+
   useEffect(() => {
     if (!user?.uid) {
       setProfile(null);
@@ -123,11 +126,11 @@ export default function ProfileScreen() {
         <View style={[styles.headerCard, { borderColor: palette.border, backgroundColor: palette.surface }]}> 
           <View style={[styles.profilePhoto, { backgroundColor: isDark ? '#21314A' : '#D9EAFF' }]}> 
             <Text style={[styles.profileInitial, { color: palette.textPrimary }]}>
-              {(profile?.name || profile?.email || 'U').charAt(0)}
+              {(displayName || 'U').charAt(0)}
             </Text>
           </View>
-          <Text style={[styles.name, { color: palette.textPrimary }]}>{profile?.name || profile?.email || 'Sin nombre'}</Text>
-          <Text style={[styles.email, { color: palette.textSecondary }]}>{profile?.email ?? user?.email}</Text>
+          <Text style={[styles.name, { color: palette.textPrimary }]}>{displayName}</Text>
+          <Text style={[styles.email, { color: palette.textSecondary }]}>{displayEmail}</Text>
           <Pressable style={styles.editButton} onPress={openEditProfile}>
             <Text style={styles.editButtonText}>Editar perfil</Text>
           </Pressable>

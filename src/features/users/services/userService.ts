@@ -29,8 +29,13 @@ const mapFirestoreError = (error: unknown): Error => {
   return mapFirebaseErrorToSpanish(error, 'No se pudo completar la operación de usuario en Firestore.');
 };
 
+const normalizeUid = (source: Record<string, unknown>, documentId: string): string => {
+  const sourceUid = typeof source.uid === 'string' ? source.uid.trim() : '';
+  return sourceUid || documentId;
+};
+
 const mapUser = (source: Record<string, unknown>, documentId: string): UserProfile => ({
-  uid: documentId,
+  uid: normalizeUid(source, documentId),
   email: (source.email as string | undefined) ?? '',
   name: (source.name as string | undefined) ?? '',
   photoURL: (source.photoURL as string | null | undefined) ?? null,
@@ -39,12 +44,12 @@ const mapUser = (source: Record<string, unknown>, documentId: string): UserProfi
 });
 
 const isValidUserDocument = (source: Record<string, unknown>, documentId: string): boolean => {
-  const uid = typeof source.uid === 'string' ? source.uid.trim() : documentId;
+  const uid = normalizeUid(source, documentId);
   const email = typeof source.email === 'string' ? source.email.trim() : '';
   const name = typeof source.name === 'string' ? source.name.trim() : '';
 
-  if (uid !== documentId) {
-    console.warn(`[userService] Documento users/${documentId} ignorado: uid inconsistente (${uid}).`);
+  if (!uid) {
+    console.warn(`[userService] Documento users/${documentId} ignorado: uid vacío.`);
     return false;
   }
 
@@ -56,14 +61,56 @@ const isValidUserDocument = (source: Record<string, unknown>, documentId: string
   return true;
 };
 
+const dedupeUsersByUid = (users: UserProfile[]): UserProfile[] => {
+  const usersByUid = new Map<string, UserProfile>();
+
+  users.forEach((profile) => {
+    if (!profile.uid) {
+      return;
+    }
+
+    if (!usersByUid.has(profile.uid)) {
+      usersByUid.set(profile.uid, profile);
+      return;
+    }
+
+    const previous = usersByUid.get(profile.uid);
+    const currentScore = Number(Boolean(profile.name?.trim())) + Number(Boolean(profile.email?.trim()));
+    const previousScore = Number(Boolean(previous?.name?.trim())) + Number(Boolean(previous?.email?.trim()));
+
+    if (currentScore > previousScore) {
+      usersByUid.set(profile.uid, profile);
+    }
+  });
+
+  return [...usersByUid.values()];
+};
+
 const mapUsersFromSnapshot = (docs: { id: string; data: () => Record<string, unknown> }[], currentUserUid?: string) => {
   const users = docs
     .map((docSnapshot) => ({ id: docSnapshot.id, data: docSnapshot.data() }))
     .filter(({ id, data }) => isValidUserDocument(data, id))
-    .map(({ id, data }) => mapUser(data, id))
-    .filter((user) => user.uid !== currentUserUid);
+    .map(({ id, data }) => mapUser(data, id));
 
-  return users.sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email));
+  return dedupeUsersByUid(users)
+    .filter((user) => user.uid !== currentUserUid)
+    .sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email));
+};
+
+const getUserByUidField = async (uid: string): Promise<UserProfile | null> => {
+  const firestore = requireDb();
+  const usersQuery = query(collection(firestore, 'users'), where('uid', '==', uid));
+
+  let snapshot;
+
+  try {
+    snapshot = await getDocs(usersQuery);
+  } catch (error) {
+    throw mapFirestoreError(error);
+  }
+
+  const [profile] = mapUsersFromSnapshot(snapshot.docs);
+  return profile ?? null;
 };
 
 export const listenUsers = (
@@ -114,17 +161,14 @@ export const getUserById = async (uid: string): Promise<UserProfile | null> => {
     throw mapFirestoreError(error);
   }
 
-  if (!userSnapshot.exists()) {
-    return null;
+  if (userSnapshot.exists()) {
+    const data = userSnapshot.data();
+    if (isValidUserDocument(data, userSnapshot.id)) {
+      return mapUser(data, userSnapshot.id);
+    }
   }
 
-  const data = userSnapshot.data();
-  if (!isValidUserDocument(data, userSnapshot.id)) {
-    return null;
-  }
-
-  const profile = mapUser(data, userSnapshot.id);
-  return profile;
+  return getUserByUidField(uid);
 };
 
 export const listenUserById = (
@@ -133,18 +177,30 @@ export const listenUserById = (
   onError?: (error: Error) => void,
 ) => {
   const firestore = requireDb();
+  let isActive = true;
 
-  return onSnapshot(
+  const fallbackToUidQuery = async () => {
+    try {
+      const profile = await getUserByUidField(uid);
+      if (isActive) {
+        callback(profile);
+      }
+    } catch (error) {
+      onError?.(error instanceof Error ? error : mapFirestoreError(error));
+    }
+  };
+
+  const unsubscribe = onSnapshot(
     doc(firestore, 'users', uid),
     (snapshot) => {
       if (!snapshot.exists()) {
-        callback(null);
+        void fallbackToUidQuery();
         return;
       }
 
       const data = snapshot.data();
       if (!isValidUserDocument(data, snapshot.id)) {
-        callback(null);
+        void fallbackToUidQuery();
         return;
       }
 
@@ -153,6 +209,11 @@ export const listenUserById = (
     },
     (error) => onError?.(mapFirestoreError(error)),
   );
+
+  return () => {
+    isActive = false;
+    unsubscribe();
+  };
 };
 
 export const updateUserName = async (uid: string, name: string) => {
@@ -198,5 +259,5 @@ export const getUsersByUids = async (uids: string[]): Promise<UserProfile[]> => 
     .map((docSnapshot) => ({ id: docSnapshot.id, data: docSnapshot.data() }))
     .filter(({ id, data }) => isValidUserDocument(data, id))
     .map(({ id, data }) => mapUser(data, id));
-  return users;
+  return dedupeUsersByUid(users);
 };
