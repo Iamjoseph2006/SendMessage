@@ -49,6 +49,17 @@ const mapFirebaseUser = async (user: User | null): Promise<AppUser | null> => {
   };
 };
 
+
+const normalizeProfilePayload = (email: string, name?: string | null) => {
+  const normalizedEmail = email.trim();
+  const normalizedName = (name ?? '').trim();
+
+  return {
+    email: normalizedEmail,
+    name: normalizedName || normalizedEmail,
+  };
+};
+
 const authErrorMessages: Record<string, string> = {
   'auth/invalid-email': 'Correo inválido.',
   'auth/user-not-found': 'Usuario no encontrado.',
@@ -88,10 +99,8 @@ const syncUserProfileSafely = async (firebaseUser: User): Promise<void> => {
   }
 
   try {
-    await ensureUserDocument(firebaseUser.uid, {
-      email: firebaseUser.email,
-      name: firebaseUser.displayName?.trim() || firebaseUser.email,
-    });
+    const profilePayload = normalizeProfilePayload(firebaseUser.email, firebaseUser.displayName);
+    await ensureUserDocument(firebaseUser.uid, profilePayload);
   } catch (error) {
     if (isNonBlockingProfileSyncError(error)) {
       console.warn('No se pudo sincronizar perfil en Firestore durante login, se continuará con sesión autenticada.', error);
@@ -100,18 +109,6 @@ const syncUserProfileSafely = async (firebaseUser: User): Promise<void> => {
 
     throw error;
   }
-};
-
-const hasMissingRequiredFields = (data: Record<string, unknown> | undefined, expectedUid: string) => {
-  if (!data) {
-    return true;
-  }
-
-  const uid = typeof data.uid === 'string' ? data.uid.trim() : '';
-  const email = typeof data.email === 'string' ? data.email.trim() : '';
-  const name = typeof data.name === 'string' ? data.name.trim() : '';
-
-  return !uid || uid !== expectedUid || !email || !name || !data.createdAt;
 };
 
 export const ensureUserDocument = async (uid: string, payload: EnsureUserProfilePayload) => {
@@ -177,9 +174,15 @@ export const registerUser = async (email: string, password: string, name: string
     const authClient = getAuthClient();
     const credentials = await createUserWithEmailAndPassword(authClient, normalizedEmail, password);
 
-    await ensureUserDocument(credentials.user.uid, {
-      email: credentials.user.email ?? normalizedEmail,
-      name: normalizedName,
+    const profilePayload = normalizeProfilePayload(credentials.user.email ?? normalizedEmail, normalizedName);
+
+    await setDoc(doc(getFirestoreClient(), 'users', credentials.user.uid), {
+      uid: credentials.user.uid,
+      email: profilePayload.email,
+      name: profilePayload.name,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      online: true,
     });
 
     const mappedUser = await mapFirebaseUser(credentials.user);
