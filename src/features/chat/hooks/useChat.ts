@@ -10,6 +10,7 @@ import {
   markChatAsRead,
   sendMessage,
   sendMessagePayload,
+  reactToMessage,
   togglePinMessage,
   toggleStarMessage,
   uploadChatMedia,
@@ -34,6 +35,7 @@ type UseChatResult = {
   deleteForEveryone: (messageId: string) => Promise<void>;
   toggleStar: (message: ChatMessage) => Promise<void>;
   togglePin: (message: ChatMessage) => Promise<void>;
+  react: (message: ChatMessage, emoji: string) => Promise<void>;
 };
 
 const mapError = (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback);
@@ -255,6 +257,19 @@ export const useChat = (chatId: string | null, senderId: string | null): UseChat
     }
   };
 
+  const react = async (message: ChatMessage, emoji: string) => {
+    if (!senderId) {
+      return;
+    }
+    const previousEmoji =
+      Object.entries(message.reactions ?? {}).find(([, userIds]) => userIds.includes(senderId))?.[0] ?? null;
+    try {
+      await reactToMessage(message.id, senderId, emoji, previousEmoji);
+    } catch (toggleError) {
+      setError(mapError(toggleError, 'No se pudo reaccionar al mensaje.'));
+    }
+  };
+
   return {
     messages,
     input,
@@ -274,5 +289,6 @@ export const useChat = (chatId: string | null, senderId: string | null): UseChat
     deleteForEveryone,
     toggleStar,
     togglePin,
+    react,
   };
 };

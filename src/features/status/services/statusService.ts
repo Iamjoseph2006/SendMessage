@@ -3,6 +3,7 @@ import {
   GeoPoint,
   Timestamp,
   addDoc,
+  arrayRemove,
   arrayUnion,
   collection,
   deleteDoc,
@@ -38,6 +39,7 @@ export type StatusItem = {
   emojis?: string[];
   location?: StatusLocation | null;
   viewedBy?: string[];
+  likesBy?: string[];
   backgroundColor?: string | null;
   expiresAt?: Timestamp | null;
   createdAt?: Timestamp | null;
@@ -130,6 +132,7 @@ const mapStatus = (id: string, data: Record<string, any>): StatusItem => {
         }
       : null,
     viewedBy: (data.viewedBy as string[] | undefined) ?? [],
+    likesBy: (data.likesBy as string[] | undefined) ?? [],
     backgroundColor: (data.backgroundColor as string | undefined) ?? null,
     expiresAt: (data.expiresAt as Timestamp | undefined) ?? null,
     createdAt: (data.createdAt as Timestamp | undefined) ?? null,
@@ -162,6 +165,7 @@ export const createStatus = async (userId: string, contentOrInput: string | Crea
       audioUri,
       emojis: input.emojis ?? [],
       viewedBy: [userId],
+      likesBy: [],
       location: input.location ? new GeoPoint(input.location.latitude, input.location.longitude) : null,
       locationLabel: input.location?.label ?? null,
       backgroundColor: input.backgroundColor ?? null,
@@ -268,6 +272,30 @@ export const addStatusComment = async (statusId: string, userId: string, text: s
   });
 
   return created.id;
+};
+
+export const toggleStatusLike = async (statusId: string, userId: string, shouldLike: boolean): Promise<void> => {
+  const firestore = requireDb();
+  await updateDoc(doc(firestore, 'status', statusId), {
+    likesBy: shouldLike ? arrayUnion(userId) : arrayRemove(userId),
+  });
+};
+
+export const createNotification = async (
+  userId: string,
+  type: 'status_like' | 'status_reply',
+  actorId: string,
+  payload: Record<string, unknown>,
+): Promise<void> => {
+  const firestore = requireDb();
+  await addDoc(collection(firestore, 'notifications'), {
+    userId,
+    type,
+    actorId,
+    payload,
+    read: false,
+    createdAt: serverTimestamp(),
+  });
 };
 
 export const listenStatusComments = (
