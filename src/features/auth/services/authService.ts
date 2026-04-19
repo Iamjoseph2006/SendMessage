@@ -21,6 +21,8 @@ type NormalizedUserProfile = {
   name: string;
 };
 
+const FIRESTORE_PROFILE_WRITE_TIMEOUT_MS = 12000;
+
 const toTrimmedString = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
 
 const firebaseNotConfiguredError = () =>
@@ -87,6 +89,24 @@ const normalizeAuthError = (error: unknown): Error => {
   }
 
   return mapFirebaseErrorToSpanish(error, 'No fue posible completar la autenticación.');
+};
+
+const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> => {
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutHandle = setTimeout(() => {
+      reject(new Error(message));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
+  }
 };
 
 
@@ -203,14 +223,29 @@ export const registerUser = async (email: string, password: string, name: string
       name: normalizedName,
     });
 
-    await setDoc(doc(getFirestoreClient(), 'users', credentials.user.uid), {
-      uid: credentials.user.uid,
-      email: profilePayload.email,
-      name: profilePayload.name,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-      online: true,
-    });
+    try {
+      await withTimeout(
+        setDoc(doc(getFirestoreClient(), 'users', credentials.user.uid), {
+          uid: credentials.user.uid,
+          email: profilePayload.email,
+          name: profilePayload.name,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+          online: true,
+        }),
+        FIRESTORE_PROFILE_WRITE_TIMEOUT_MS,
+        'profile-write-timeout',
+      );
+    } catch (profileError) {
+      if (!isNonBlockingProfileSyncError(profileError) && (profileError as Error)?.message !== 'profile-write-timeout') {
+        throw profileError;
+      }
+
+      console.warn(
+        'El perfil del usuario no se pudo guardar durante el registro en el tiempo esperado. Se continuará con la sesión.',
+        profileError,
+      );
+    }
 
     const mappedUser = await mapFirebaseUser(credentials.user);
     if (!mappedUser) {
