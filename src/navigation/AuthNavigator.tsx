@@ -42,6 +42,8 @@ export default function AuthNavigator() {
       <Stack.Screen name="profile/edit" options={{ headerBackTitle: 'Cuenta' }} />
       <Stack.Screen name="profile/[section]" options={{ headerBackTitle: 'Perfil' }} />
       <Stack.Screen name="status/create" options={{ headerBackTitle: 'Estados' }} />
+      <Stack.Screen name="status/my" options={{ headerBackTitle: 'Estados' }} />
+      <Stack.Screen name="status/[statusId]" options={{ headerBackTitle: 'Mi estado' }} />
     </Stack>
   );
 }
