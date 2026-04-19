@@ -1,4 +1,15 @@
-import { FirestoreError, Timestamp, addDoc, collection, getDocs, orderBy, query, serverTimestamp } from 'firebase/firestore';
+import {
+  FirestoreError,
+  Timestamp,
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  orderBy,
+  query,
+  serverTimestamp,
+} from 'firebase/firestore';
 import { db } from '@/src/config/firebase';
 import { mapFirebaseErrorToSpanish } from '@/src/config/firebaseErrors';
 
@@ -65,6 +76,16 @@ export const getStatuses = async (): Promise<StatusItem[]> => {
         createdAt: (data.createdAt as Timestamp | undefined) ?? null,
       } as StatusItem;
     });
+  } catch (error) {
+    throw mapFirestoreError(error);
+  }
+};
+
+export const deleteStatus = async (statusId: string): Promise<void> => {
+  const firestore = requireDb();
+
+  try {
+    await deleteDoc(doc(firestore, 'status', statusId));
   } catch (error) {
     throw mapFirestoreError(error);
   }
