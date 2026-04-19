@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/features/auth/hooks/useAuth';
 import { createCall, getCallHistory, CallLog, CallType } from '@/src/features/calls/services/callService';
@@ -70,7 +70,7 @@ export default function CallsScreen() {
         <Text style={[styles.headerTitle, { color: palette.textPrimary }]}>Llamadas</Text>
       </View>
 
-      <View style={styles.container}>
+      <ScrollView contentContainerStyle={styles.container}>
         {users.map((directoryUser) => {
           const displayName = directoryUser.name || directoryUser.email;
 
@@ -112,7 +112,7 @@ export default function CallsScreen() {
         })}
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
-      </View>
+      </ScrollView>
 
       {activeCall ? (
         <View style={styles.callBanner}>
@@ -133,7 +133,7 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#FFF' },
   header: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 },
   headerTitle: { fontSize: 34, fontWeight: '800', color: '#1A2B44' },
-  container: { paddingHorizontal: 16, paddingTop: 10, gap: 12 },
+  container: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 100, gap: 12 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

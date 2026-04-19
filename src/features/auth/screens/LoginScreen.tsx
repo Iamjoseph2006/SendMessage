@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 type LoginScreenProps = {
   onLogin: (email: string, password: string) => Promise<void>;
@@ -28,37 +28,41 @@ export default function LoginScreen({ onLogin, onGoToRegister, error }: LoginScr
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Iniciar sesión</Text>
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.container}>
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+        <View>
+          <Text style={styles.title}>Iniciar sesión</Text>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        autoCapitalize="none"
-        keyboardType="email-address"
-        value={email}
-        onChangeText={setEmail}
-        placeholderTextColor="#6F7D8C"
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Contraseña"
-        secureTextEntry
-        value={password}
-        onChangeText={setPassword}
-        placeholderTextColor="#6F7D8C"
-      />
+          <TextInput
+            style={styles.input}
+            placeholder="Email"
+            autoCapitalize="none"
+            keyboardType="email-address"
+            value={email}
+            onChangeText={setEmail}
+            placeholderTextColor="#6F7D8C"
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Contraseña"
+            secureTextEntry
+            value={password}
+            onChangeText={setPassword}
+            placeholderTextColor="#6F7D8C"
+          />
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+          {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <Pressable style={styles.primaryButton} disabled={submitting} onPress={handleSubmit}>
-        <Text style={styles.primaryButtonText}>{submitting ? 'Ingresando...' : 'Login'}</Text>
-      </Pressable>
+          <Pressable style={styles.primaryButton} disabled={submitting} onPress={handleSubmit}>
+            <Text style={styles.primaryButtonText}>{submitting ? 'Ingresando...' : 'Login'}</Text>
+          </Pressable>
 
-      <Pressable onPress={onGoToRegister}>
-        <Text style={styles.secondaryButtonText}>¿No tienes cuenta? Regístrate</Text>
-      </Pressable>
-    </View>
+          <Pressable onPress={onGoToRegister}>
+            <Text style={styles.secondaryButtonText}>¿No tienes cuenta? Regístrate</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -69,6 +73,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     backgroundColor: '#fff',
     gap: 12,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
   },
   title: {
     fontSize: 28,

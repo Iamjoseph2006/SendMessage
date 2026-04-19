@@ -36,7 +36,10 @@ export default function AuthNavigator() {
       <Stack.Screen name="login" options={{ headerShown: false }} />
       <Stack.Screen name="register" options={{ title: 'Registro' }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="chat/new" options={{ headerBackTitle: 'Chats' }} />
       <Stack.Screen name="chat/[chatId]" options={{ headerShown: false }} />
+      <Stack.Screen name="profile/account" options={{ headerBackTitle: 'Perfil' }} />
+      <Stack.Screen name="profile/edit" options={{ headerBackTitle: 'Cuenta' }} />
       <Stack.Screen name="profile/[section]" options={{ headerBackTitle: 'Perfil' }} />
       <Stack.Screen name="status/create" options={{ headerBackTitle: 'Estados' }} />
     </Stack>

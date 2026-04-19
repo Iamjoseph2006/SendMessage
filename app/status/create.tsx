@@ -1,6 +1,6 @@
 import { Stack, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/features/auth/hooks/useAuth';
 import { createStatus } from '@/src/features/status/services/statusService';
@@ -38,39 +38,41 @@ export default function CreateStatusScreen() {
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background }]}>
       <Stack.Screen options={{ title: 'Nuevo estado' }} />
-      <View style={styles.container}>
-        <Text style={[styles.label, { color: palette.textPrimary }]}>Escribe tu estado</Text>
-        <TextInput
-          value={content}
-          onChangeText={setContent}
-          editable={!saving}
-          multiline
-          autoFocus
-          placeholder="Escribe un estado..."
-          placeholderTextColor={palette.textSecondary}
-          style={[
-            styles.input,
-            {
-              color: palette.textPrimary,
-              borderColor: palette.border,
-              backgroundColor: palette.surface,
-            },
-          ]}
-        />
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.safeArea}>
+        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+          <Text style={[styles.label, { color: palette.textPrimary }]}>Escribe tu estado</Text>
+          <TextInput
+            value={content}
+            onChangeText={setContent}
+            editable={!saving}
+            multiline
+            autoFocus
+            placeholder="Escribe un estado..."
+            placeholderTextColor={palette.textSecondary}
+            style={[
+              styles.input,
+              {
+                color: palette.textPrimary,
+                borderColor: palette.border,
+                backgroundColor: palette.surface,
+              },
+            ]}
+          />
 
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+          {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        <Pressable style={styles.publishButton} disabled={saving} onPress={onCreateStatus}>
-          {saving ? <ActivityIndicator color="#FFF" size="small" /> : <Text style={styles.publishText}>Publicar</Text>}
-        </Pressable>
-      </View>
+          <Pressable style={styles.publishButton} disabled={saving} onPress={onCreateStatus}>
+            {saving ? <ActivityIndicator color="#FFF" size="small" /> : <Text style={styles.publishText}>Publicar</Text>}
+          </Pressable>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
-  container: { flex: 1, paddingHorizontal: 16, paddingTop: 16, gap: 12 },
+  container: { flexGrow: 1, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 24, gap: 12 },
   label: { fontSize: 16, fontWeight: '700' },
   input: {
     minHeight: 120,

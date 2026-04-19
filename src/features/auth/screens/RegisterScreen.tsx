@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 type RegisterScreenProps = {
   onRegister: (name: string, email: string, password: string) => Promise<void>;
@@ -36,41 +36,45 @@ export default function RegisterScreen({ onRegister, error }: RegisterScreenProp
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Crear cuenta</Text>
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.container}>
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+        <View>
+          <Text style={styles.title}>Crear cuenta</Text>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Nombre"
-        value={name}
-        onChangeText={setName}
-        placeholderTextColor="#6F7D8C"
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        autoCapitalize="none"
-        keyboardType="email-address"
-        value={email}
-        onChangeText={setEmail}
-        placeholderTextColor="#6F7D8C"
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Contraseña"
-        secureTextEntry
-        value={password}
-        onChangeText={setPassword}
-        placeholderTextColor="#6F7D8C"
-      />
+          <TextInput
+            style={styles.input}
+            placeholder="Nombre"
+            value={name}
+            onChangeText={setName}
+            placeholderTextColor="#6F7D8C"
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Email"
+            autoCapitalize="none"
+            keyboardType="email-address"
+            value={email}
+            onChangeText={setEmail}
+            placeholderTextColor="#6F7D8C"
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Contraseña"
+            secureTextEntry
+            value={password}
+            onChangeText={setPassword}
+            placeholderTextColor="#6F7D8C"
+          />
 
-      {localError ? <Text style={styles.error}>{localError}</Text> : null}
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+          {localError ? <Text style={styles.error}>{localError}</Text> : null}
+          {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <Pressable style={styles.primaryButton} disabled={submitting} onPress={handleSubmit}>
-        <Text style={styles.primaryButtonText}>{submitting ? 'Creando...' : 'Crear cuenta'}</Text>
-      </Pressable>
-    </View>
+          <Pressable style={styles.primaryButton} disabled={submitting} onPress={handleSubmit}>
+            <Text style={styles.primaryButtonText}>{submitting ? 'Creando...' : 'Crear cuenta'}</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -81,6 +85,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     backgroundColor: '#fff',
     gap: 12,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
   },
   title: {
     fontSize: 28,
