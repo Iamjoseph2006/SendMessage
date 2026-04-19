@@ -15,6 +15,14 @@ type EnsureUserProfilePayload = {
   name: string;
 };
 
+type NormalizedUserProfile = {
+  uid: string;
+  email: string;
+  name: string;
+};
+
+const toTrimmedString = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
+
 const firebaseNotConfiguredError = () =>
   new Error(firebaseConfigError ?? 'Firebase no está configurado.');
 
@@ -50,11 +58,13 @@ const mapFirebaseUser = async (user: User | null): Promise<AppUser | null> => {
 };
 
 
-const normalizeProfilePayload = (email: string, name?: string | null) => {
-  const normalizedEmail = email.trim();
-  const normalizedName = (name ?? '').trim();
+const normalizeProfilePayload = (uid: string, payload: EnsureUserProfilePayload): NormalizedUserProfile => {
+  const normalizedUid = toTrimmedString(uid);
+  const normalizedEmail = toTrimmedString(payload.email);
+  const normalizedName = toTrimmedString(payload.name);
 
   return {
+    uid: normalizedUid,
     email: normalizedEmail,
     name: normalizedName || normalizedEmail,
   };
@@ -93,13 +103,27 @@ const isNonBlockingProfileSyncError = (error: unknown): boolean => {
   );
 };
 
+const hasMissingRequiredFields = (
+  source: Record<string, unknown> | undefined,
+  uid: string,
+): boolean => {
+  const sourceUid = typeof source?.uid === 'string' ? source.uid.trim() : '';
+  const sourceEmail = typeof source?.email === 'string' ? source.email.trim() : '';
+  const sourceName = typeof source?.name === 'string' ? source.name.trim() : '';
+
+  return !sourceUid || sourceUid !== uid || !sourceEmail || !sourceName;
+};
+
 const syncUserProfileSafely = async (firebaseUser: User): Promise<void> => {
   if (!firebaseUser.email) {
     return;
   }
 
   try {
-    const profilePayload = normalizeProfilePayload(firebaseUser.email, firebaseUser.displayName);
+    const profilePayload = normalizeProfilePayload(firebaseUser.uid, {
+      email: firebaseUser.email,
+      name: firebaseUser.displayName ?? '',
+    });
     await ensureUserDocument(firebaseUser.uid, profilePayload);
   } catch (error) {
     if (isNonBlockingProfileSyncError(error)) {
@@ -164,8 +188,8 @@ export const ensureUserDocument = async (uid: string, payload: EnsureUserProfile
 
 export const registerUser = async (email: string, password: string, name: string): Promise<AppUser> => {
   try {
-    const normalizedEmail = email.trim();
-    const normalizedName = name.trim();
+    const normalizedEmail = toTrimmedString(email);
+    const normalizedName = toTrimmedString(name);
 
     if (!normalizedName) {
       throw new Error('El nombre es obligatorio.');
@@ -174,7 +198,10 @@ export const registerUser = async (email: string, password: string, name: string
     const authClient = getAuthClient();
     const credentials = await createUserWithEmailAndPassword(authClient, normalizedEmail, password);
 
-    const profilePayload = normalizeProfilePayload(credentials.user.email ?? normalizedEmail, normalizedName);
+    const profilePayload = normalizeProfilePayload(credentials.user.uid, {
+      email: credentials.user.email ?? normalizedEmail,
+      name: normalizedName,
+    });
 
     await setDoc(doc(getFirestoreClient(), 'users', credentials.user.uid), {
       uid: credentials.user.uid,
