@@ -68,19 +68,38 @@ const normalizeAuthError = (error: unknown): Error => {
   return mapFirebaseErrorToSpanish(error, 'No fue posible completar la autenticación.');
 };
 
-const normalizeProfilePayload = (uid: string, payload: EnsureUserProfilePayload) => {
-  const email = payload.email.trim();
-  const name = payload.name.trim() || email;
 
-  if (!uid?.trim()) {
-    throw new Error('UID inválido al sincronizar el perfil de usuario.');
+const isNonBlockingProfileSyncError = (error: unknown): boolean => {
+  const firebaseError = error as Partial<AuthError> & { message?: string; code?: string };
+  const normalizedCode = firebaseError?.code?.replace(/^auth\//, '') ?? firebaseError?.code ?? '';
+  const normalizedMessage = firebaseError?.message?.toLowerCase() ?? '';
+
+  return (
+    normalizedCode === 'unavailable'
+    || normalizedCode === 'network-request-failed'
+    || normalizedMessage.includes('client is offline')
+    || normalizedMessage.includes('network-request-failed')
+  );
+};
+
+const syncUserProfileSafely = async (firebaseUser: User): Promise<void> => {
+  if (!firebaseUser.email) {
+    return;
   }
 
-  if (!email) {
-    throw new Error('Email inválido al sincronizar el perfil de usuario.');
-  }
+  try {
+    await ensureUserDocument(firebaseUser.uid, {
+      email: firebaseUser.email,
+      name: firebaseUser.displayName?.trim() || firebaseUser.email,
+    });
+  } catch (error) {
+    if (isNonBlockingProfileSyncError(error)) {
+      console.warn('No se pudo sincronizar perfil en Firestore durante login, se continuará con sesión autenticada.', error);
+      return;
+    }
 
-  return { uid: uid.trim(), email, name };
+    throw error;
+  }
 };
 
 const hasMissingRequiredFields = (data: Record<string, unknown> | undefined, expectedUid: string) => {
@@ -178,12 +197,7 @@ export const loginUser = async (email: string, password: string): Promise<AppUse
   try {
     const authClient = getAuthClient();
     const credentials = await signInWithEmailAndPassword(authClient, email.trim(), password);
-    if (credentials.user.email) {
-      await ensureUserDocument(credentials.user.uid, {
-        email: credentials.user.email,
-        name: credentials.user.displayName?.trim() || credentials.user.email,
-      });
-    }
+    await syncUserProfileSafely(credentials.user);
 
     const mappedUser = await mapFirebaseUser(credentials.user);
 
@@ -216,10 +230,7 @@ export const repairAuthenticatedUserProfile = async (firebaseUser: User | null):
     return;
   }
 
-  await ensureUserDocument(firebaseUser.uid, {
-    email: firebaseUser.email,
-    name: firebaseUser.displayName?.trim() || firebaseUser.email,
-  });
+  await syncUserProfileSafely(firebaseUser);
 };
 
 export const syncAuthenticatedUserProfile = repairAuthenticatedUserProfile;
