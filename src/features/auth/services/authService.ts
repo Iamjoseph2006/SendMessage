@@ -1,5 +1,5 @@
 import { AuthError, User, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile } from 'firebase/auth';
-import { FirestoreError, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { FirestoreError, doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { auth, db, firebaseConfig, firebaseConfigError } from '@/src/config/firebase';
 import { mapFirebaseErrorToSpanish } from '@/src/config/firebaseErrors';
 
@@ -125,6 +125,14 @@ const isNonBlockingProfileSyncError = (error: unknown): boolean => {
   );
 };
 
+const isOfflineLikeFirestoreError = (error: unknown): boolean => {
+  const firestoreError = error as Partial<FirestoreError> & { message?: string; code?: string };
+  const normalizedCode = firestoreError?.code?.replace(/^auth\//, '') ?? firestoreError?.code ?? '';
+  const normalizedMessage = firestoreError?.message?.toLowerCase() ?? '';
+
+  return normalizedCode === 'unavailable' || normalizedMessage.includes('client is offline');
+};
+
 const getFirebaseLikeErrorCode = (error: unknown): string => {
   const firebaseError = error as Partial<AuthError & FirestoreError> & { code?: string };
   return firebaseError?.code ?? 'unknown';
@@ -247,6 +255,12 @@ export const ensureUserDocument = async (uid: string, payload: EnsureUserProfile
     throw new Error(`No se pudo verificar la persistencia de users/${normalizedProfile.uid}.`);
   } catch (verificationError) {
     const firestoreError = verificationError as Partial<FirestoreError> & { message?: string };
+    if (isOfflineLikeFirestoreError(verificationError)) {
+      console.warn(
+        `[authService] Verificación users/${normalizedProfile.uid} omitida por modo offline (code=${firestoreError.code ?? 'unknown'}). La escritura setDoc quedó en cola local.`,
+      );
+      return;
+    }
     console.error(
       `[authService] Error verificando users/${normalizedProfile.uid} (code=${firestoreError.code ?? 'unknown'}).`,
       verificationError,
@@ -357,7 +371,7 @@ export const logoutUser = async (): Promise<void> => {
   void updateDoc(doc(db, 'users', uid), {
     online: false,
     updatedAt: serverTimestamp(),
-  }).catch((error) => {
+  }).catch((error: unknown) => {
     console.warn('No se pudo marcar al usuario como desconectado en Firestore.', error);
   });
 };

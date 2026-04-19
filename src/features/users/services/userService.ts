@@ -249,16 +249,19 @@ export const listenUsers = (
     usersQuery,
     (snapshot) => {
       const result = mapUsersFromSnapshot(snapshot.docs, currentUserUid);
+      const isFromCache = snapshot.metadata.fromCache;
       console.log(
-        `[userService] onSnapshot users OK. projectId=${firebaseConfig.projectId || 'N/D'} appId=${firebaseConfig.appId || 'N/D'} authDomain=${firebaseConfig.authDomain || 'N/D'} docs_crudos=${result.rawDocs}, válidos_antes_excluir=${result.validBeforeExclude}, finales=${result.afterExclude}, excludeUid=${currentUserUid ?? 'none'}, uids=[${result.knownUids.join(',') || 'none'}].`,
+        `[userService] onSnapshot users OK. projectId=${firebaseConfig.projectId || 'N/D'} appId=${firebaseConfig.appId || 'N/D'} authDomain=${firebaseConfig.authDomain || 'N/D'} docs_crudos=${result.rawDocs}, válidos_antes_excluir=${result.validBeforeExclude}, finales=${result.afterExclude}, excludeUid=${currentUserUid ?? 'none'}, desde_cache=${isFromCache}, uids=[${result.knownUids.join(',') || 'none'}].`,
       );
       if (currentUserUid && result.containsCurrentUser && result.afterExclude === 0) {
         console.warn(
           `[userService] Solo existe users/${currentUserUid} tras excluir el usuario actual. Posible falta de persistencia del segundo usuario en colección users.`,
         );
       }
-      if (result.rawDocs === 1 && result.validBeforeExclude === 1) {
+      if (result.rawDocs === 1 && result.validBeforeExclude === 1 && !isFromCache) {
         console.warn('[userService] WARN: posible inconsistencia de backend Firebase entre dispositivos');
+      } else if (result.rawDocs === 1 && result.validBeforeExclude === 1 && isFromCache) {
+        console.warn('[userService] Snapshot desde caché local (offline). Se omite advertencia de inconsistencia entre dispositivos.');
       }
       callback(result.users);
     },
@@ -275,9 +278,11 @@ export const listenUsers = (
 export const getUsers = async (currentUserUid?: string): Promise<UserProfile[]> => {
   const firestore = requireDb();
   let snapshot;
+  let isFromCache = false;
 
   try {
     snapshot = await getDocs(collection(firestore, 'users'));
+    isFromCache = snapshot.metadata.fromCache;
     console.log(`[userService] getDocs users OK. docs=${snapshot.size}.`);
   } catch (error) {
     const firestoreError = error as Partial<FirestoreError>;
@@ -292,6 +297,7 @@ export const getUsers = async (currentUserUid?: string): Promise<UserProfile[]> 
     try {
       await ensureAuthenticatedUserDoc(auth.currentUser);
       snapshot = await getDocs(collection(firestore, 'users'));
+      isFromCache = snapshot.metadata.fromCache;
       console.log(`[userService] getDocs users tras autorreparación. docs=${snapshot.size}.`);
     } catch (repairError) {
       throw mapFirestoreError(repairError);
@@ -300,15 +306,17 @@ export const getUsers = async (currentUserUid?: string): Promise<UserProfile[]> 
 
   const result = mapUsersFromSnapshot(snapshot.docs, currentUserUid);
   console.log(
-    `[userService] getUsers resumen. projectId=${firebaseConfig.projectId || 'N/D'} appId=${firebaseConfig.appId || 'N/D'} authDomain=${firebaseConfig.authDomain || 'N/D'} docs_crudos=${result.rawDocs}, válidos_antes_excluir=${result.validBeforeExclude}, finales=${result.afterExclude}, excludeUid=${currentUserUid ?? 'none'}, uids=[${result.knownUids.join(',') || 'none'}].`,
+    `[userService] getUsers resumen. projectId=${firebaseConfig.projectId || 'N/D'} appId=${firebaseConfig.appId || 'N/D'} authDomain=${firebaseConfig.authDomain || 'N/D'} docs_crudos=${result.rawDocs}, válidos_antes_excluir=${result.validBeforeExclude}, finales=${result.afterExclude}, excludeUid=${currentUserUid ?? 'none'}, desde_cache=${isFromCache}, uids=[${result.knownUids.join(',') || 'none'}].`,
   );
   if (currentUserUid && result.containsCurrentUser && result.afterExclude === 0) {
     console.warn(
       `[userService] getUsers detectó solo users/${currentUserUid}. El segundo usuario no aparece persistido aún en users.`,
     );
   }
-  if (result.rawDocs === 1 && result.validBeforeExclude === 1) {
+  if (result.rawDocs === 1 && result.validBeforeExclude === 1 && !isFromCache) {
     console.warn('[userService] WARN: posible inconsistencia de backend Firebase entre dispositivos');
+  } else if (result.rawDocs === 1 && result.validBeforeExclude === 1 && isFromCache) {
+    console.warn('[userService] Resultado desde caché local (offline). Se omite advertencia de inconsistencia entre dispositivos.');
   }
   return result.users;
 };
