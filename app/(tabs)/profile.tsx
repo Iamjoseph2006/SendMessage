@@ -28,6 +28,7 @@ export default function ProfileScreen() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [nextName, setNextName] = useState('');
   const [savingName, setSavingName] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   useEffect(() => {
     if (!user?.uid) {
@@ -82,10 +83,7 @@ export default function ProfileScreen() {
     setError(null);
 
     try {
-      await Promise.race([
-        updateProfileName(user.uid, normalizedName),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('La actualización tardó demasiado. Intenta de nuevo.')), 10000)),
-      ]);
+      await updateProfileName(user.uid, normalizedName);
       setShowEditModal(false);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'No fue posible guardar tu nombre.');
@@ -94,6 +92,23 @@ export default function ProfileScreen() {
     }
   };
 
+
+  const handleLogout = async () => {
+    if (loggingOut) {
+      return;
+    }
+
+    setError(null);
+    setLoggingOut(true);
+
+    try {
+      await logout();
+    } catch (logoutError) {
+      setError(logoutError instanceof Error ? logoutError.message : 'No fue posible cerrar sesión.');
+    } finally {
+      setLoggingOut(false);
+    }
+  };
   if (loading) {
     return (
       <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background }]}> 
@@ -133,8 +148,8 @@ export default function ProfileScreen() {
           </Pressable>
         ))}
 
-        <Pressable style={styles.logoutButton} onPress={logout}>
-          <Text style={styles.logoutText}>Cerrar sesión</Text>
+        <Pressable style={styles.logoutButton} disabled={loggingOut} onPress={handleLogout}>
+          {loggingOut ? <ActivityIndicator color="#C62828" size="small" /> : <Text style={styles.logoutText}>Cerrar sesión</Text>}
         </Pressable>
       </View>
 
