@@ -21,6 +21,10 @@ const requireDb = () => {
 
 const mapFirestoreError = (error: unknown): Error => {
   const firestoreError = error as Partial<FirestoreError>;
+  console.error(
+    `[userService] Error Firestore code=${firestoreError?.code ?? 'unknown'} message=${firestoreError?.message ?? 'N/D'}`,
+    error,
+  );
 
   if (firestoreError?.code === 'failed-precondition') {
     return new Error('Falta un índice en Firestore para completar la consulta.');
@@ -129,10 +133,18 @@ export const listenUsers = (
     usersQuery,
     (snapshot) => {
       const filteredUsers = mapUsersFromSnapshot(snapshot.docs, currentUserUid);
-      console.log(`[userService] Usuarios Firestore válidos: ${filteredUsers.length}.`);
+      console.log(
+        `[userService] onSnapshot users OK. docs=${snapshot.size}, válidos=${filteredUsers.length}, excludeUid=${currentUserUid ?? 'none'}.`,
+      );
       callback(filteredUsers);
     },
-    (error) => onError?.(mapFirestoreError(error)),
+    (error) => {
+      const firestoreError = error as Partial<FirestoreError>;
+      console.error(
+        `[userService] onSnapshot users FALLÓ. code=${firestoreError?.code ?? 'unknown'} message=${firestoreError?.message ?? 'N/D'}`,
+      );
+      onError?.(mapFirestoreError(error));
+    },
   );
 };
 
@@ -141,8 +153,13 @@ export const getUsers = async (currentUserUid?: string): Promise<UserProfile[]> 
   let snapshot;
 
   try {
-    snapshot = await getDocs(query(collection(firestore, 'users')));
+    snapshot = await getDocs(collection(firestore, 'users'));
+    console.log(`[userService] getDocs users OK. docs=${snapshot.size}.`);
   } catch (error) {
+    const firestoreError = error as Partial<FirestoreError>;
+    console.error(
+      `[userService] getDocs users FALLÓ. code=${firestoreError?.code ?? 'unknown'} message=${firestoreError?.message ?? 'N/D'}`,
+    );
     throw mapFirestoreError(error);
   }
 
@@ -157,7 +174,12 @@ export const getUserById = async (uid: string): Promise<UserProfile | null> => {
 
   try {
     userSnapshot = await getDoc(doc(firestore, 'users', uid));
+    console.log(`[userService] getDoc users/${uid} OK. exists=${userSnapshot.exists()}.`);
   } catch (error) {
+    const firestoreError = error as Partial<FirestoreError>;
+    console.error(
+      `[userService] getDoc users/${uid} FALLÓ. code=${firestoreError?.code ?? 'unknown'} message=${firestoreError?.message ?? 'N/D'}`,
+    );
     throw mapFirestoreError(error);
   }
 
