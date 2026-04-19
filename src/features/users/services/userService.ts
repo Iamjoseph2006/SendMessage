@@ -19,7 +19,6 @@ const requireDb = () => {
   return db;
 };
 
-
 const mapFirestoreError = (error: unknown): Error => {
   const firestoreError = error as Partial<FirestoreError>;
 
@@ -39,6 +38,34 @@ const mapUser = (source: Record<string, unknown>, documentId: string): UserProfi
   createdAt: (source.createdAt as Timestamp | undefined) ?? null,
 });
 
+const isValidUserDocument = (source: Record<string, unknown>, documentId: string): boolean => {
+  const uid = typeof source.uid === 'string' ? source.uid.trim() : documentId;
+  const email = typeof source.email === 'string' ? source.email.trim() : '';
+  const name = typeof source.name === 'string' ? source.name.trim() : '';
+
+  if (uid !== documentId) {
+    console.warn(`[userService] Documento users/${documentId} ignorado: uid inconsistente (${uid}).`);
+    return false;
+  }
+
+  if (!email && !name) {
+    console.warn(`[userService] Documento users/${documentId} ignorado: faltan email y name.`);
+    return false;
+  }
+
+  return true;
+};
+
+const mapUsersFromSnapshot = (docs: { id: string; data: () => Record<string, unknown> }[], currentUserUid?: string) => {
+  const users = docs
+    .map((docSnapshot) => ({ id: docSnapshot.id, data: docSnapshot.data() }))
+    .filter(({ id, data }) => isValidUserDocument(data, id))
+    .map(({ id, data }) => mapUser(data, id))
+    .filter((user) => user.uid !== currentUserUid);
+
+  return users.sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email));
+};
+
 export const listenUsers = (
   currentUserUid: string | undefined,
   callback: (users: UserProfile[]) => void,
@@ -54,12 +81,8 @@ export const listenUsers = (
   return onSnapshot(
     usersQuery,
     (snapshot) => {
-      const users = snapshot.docs
-        .map((docSnapshot) => mapUser(docSnapshot.data(), docSnapshot.id))
-        .filter((user) => user.uid !== currentUserUid);
-
-      const filteredUsers = users.sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email));
-
+      const filteredUsers = mapUsersFromSnapshot(snapshot.docs, currentUserUid);
+      console.log(`[userService] Usuarios Firestore válidos: ${filteredUsers.length}.`);
       callback(filteredUsers);
     },
     (error) => onError?.(mapFirestoreError(error)),
@@ -76,10 +99,9 @@ export const getUsers = async (currentUserUid?: string): Promise<UserProfile[]> 
     throw mapFirestoreError(error);
   }
 
-  return snapshot.docs
-    .map((docSnapshot) => mapUser(docSnapshot.data(), docSnapshot.id))
-    .filter((user) => user.uid !== currentUserUid)
-    .sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email));
+  const users = mapUsersFromSnapshot(snapshot.docs, currentUserUid);
+  console.log(`[userService] getUsers devolvió ${users.length} usuarios válidos.`);
+  return users;
 };
 
 export const getUserById = async (uid: string): Promise<UserProfile | null> => {
@@ -96,7 +118,12 @@ export const getUserById = async (uid: string): Promise<UserProfile | null> => {
     return null;
   }
 
-  const profile = mapUser(userSnapshot.data(), userSnapshot.id);
+  const data = userSnapshot.data();
+  if (!isValidUserDocument(data, userSnapshot.id)) {
+    return null;
+  }
+
+  const profile = mapUser(data, userSnapshot.id);
   return profile;
 };
 
@@ -115,7 +142,13 @@ export const listenUserById = (
         return;
       }
 
-      const profile = mapUser(snapshot.data(), snapshot.id);
+      const data = snapshot.data();
+      if (!isValidUserDocument(data, snapshot.id)) {
+        callback(null);
+        return;
+      }
+
+      const profile = mapUser(data, snapshot.id);
       callback(profile);
     },
     (error) => onError?.(mapFirestoreError(error)),
@@ -161,6 +194,9 @@ export const getUsersByUids = async (uids: string[]): Promise<UserProfile[]> => 
     throw mapFirestoreError(error);
   }
 
-  const users = snapshot.docs.map((docSnapshot) => mapUser(docSnapshot.data(), docSnapshot.id));
+  const users = snapshot.docs
+    .map((docSnapshot) => ({ id: docSnapshot.id, data: docSnapshot.data() }))
+    .filter(({ id, data }) => isValidUserDocument(data, id))
+    .map(({ id, data }) => mapUser(data, id));
   return users;
 };

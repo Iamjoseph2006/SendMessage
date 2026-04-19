@@ -10,6 +10,11 @@ export type AppUser = {
   displayName?: string;
 };
 
+type EnsureUserProfilePayload = {
+  email: string;
+  name: string;
+};
+
 const firebaseNotConfiguredError = () =>
   new Error(firebaseConfigError ?? 'Firebase no está configurado.');
 
@@ -106,35 +111,52 @@ const syncUserProfileSafely = async (firebaseUser: User): Promise<void> => {
   }
 };
 
-export const ensureUserDocument = async (
-  uid: string,
-  payload: {
-    email: string;
-    name: string;
-  },
-) => {
+export const ensureUserDocument = async (uid: string, payload: EnsureUserProfilePayload) => {
   const firestoreClient = getFirestoreClient();
-  const userRef = doc(firestoreClient, 'users', uid);
+  const normalizedProfile = normalizeProfilePayload(uid, payload);
+  const userRef = doc(firestoreClient, 'users', normalizedProfile.uid);
   const userSnapshot = await getDoc(userRef);
 
   if (!userSnapshot.exists()) {
     await setDoc(userRef, {
-      uid,
-      email: payload.email,
-      name: payload.name || payload.email,
+      uid: normalizedProfile.uid,
+      email: normalizedProfile.email,
+      name: normalizedProfile.name,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       online: true,
     });
+    console.log(`[authService] Perfil users/${normalizedProfile.uid} creado desde Auth.`);
     return;
   }
 
   const currentData = userSnapshot.data();
+  const requiresRepair = hasMissingRequiredFields(currentData, normalizedProfile.uid);
+
+  if (requiresRepair) {
+    await setDoc(
+      userRef,
+      {
+        uid: normalizedProfile.uid,
+        email: normalizedProfile.email,
+        name: normalizedProfile.name,
+        online: Boolean(currentData?.online),
+        createdAt: currentData?.createdAt ?? serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true },
+    );
+    console.warn(`[authService] Perfil users/${normalizedProfile.uid} reparado por campos faltantes.`);
+    return;
+  }
+
   const currentName = typeof currentData?.name === 'string' ? currentData.name.trim() : '';
+  const currentEmail = typeof currentData?.email === 'string' ? currentData.email.trim() : '';
 
   await updateDoc(userRef, {
-    email: payload.email,
-    ...(currentName ? {} : { name: payload.name || payload.email }),
+    ...(currentEmail !== normalizedProfile.email ? { email: normalizedProfile.email } : {}),
+    ...(currentName ? {} : { name: normalizedProfile.name }),
+    ...(currentData?.uid ? {} : { uid: normalizedProfile.uid }),
     online: true,
     updatedAt: serverTimestamp(),
   }).catch(() => undefined);
@@ -206,14 +228,15 @@ export const logoutUser = async (): Promise<void> => {
   await signOut(authClient);
 };
 
-
-export const syncAuthenticatedUserProfile = async (firebaseUser: User | null): Promise<void> => {
+export const repairAuthenticatedUserProfile = async (firebaseUser: User | null): Promise<void> => {
   if (!firebaseUser?.uid || !firebaseUser.email) {
     return;
   }
 
   await syncUserProfileSafely(firebaseUser);
 };
+
+export const syncAuthenticatedUserProfile = repairAuthenticatedUserProfile;
 
 export const getCurrentUser = async (): Promise<AppUser | null> => {
   return mapFirebaseUser(getAuthClient().currentUser);
