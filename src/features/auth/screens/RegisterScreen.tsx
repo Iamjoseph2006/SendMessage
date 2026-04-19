@@ -37,7 +37,13 @@ export default function RegisterScreen({ onRegister, error }: RegisterScreenProp
     <View style={styles.container}>
       <Text style={styles.title}>Crear cuenta</Text>
 
-      <TextInput style={styles.input} placeholder="Nombre" value={name} onChangeText={setName} />
+      <TextInput
+        style={styles.input}
+        placeholder="Nombre"
+        value={name}
+        onChangeText={setName}
+        placeholderTextColor="#6F7D8C"
+      />
       <TextInput
         style={styles.input}
         placeholder="Email"
@@ -45,6 +51,7 @@ export default function RegisterScreen({ onRegister, error }: RegisterScreenProp
         keyboardType="email-address"
         value={email}
         onChangeText={setEmail}
+        placeholderTextColor="#6F7D8C"
       />
       <TextInput
         style={styles.input}
@@ -52,6 +59,7 @@ export default function RegisterScreen({ onRegister, error }: RegisterScreenProp
         secureTextEntry
         value={password}
         onChangeText={setPassword}
+        placeholderTextColor="#6F7D8C"
       />
 
       {localError ? <Text style={styles.error}>{localError}</Text> : null}
@@ -84,6 +92,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
+    color: '#132238',
+    backgroundColor: '#FFFFFF',
   },
   primaryButton: {
     marginTop: 8,

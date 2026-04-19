@@ -38,6 +38,7 @@ export default function LoginScreen({ onLogin, onGoToRegister, error }: LoginScr
         keyboardType="email-address"
         value={email}
         onChangeText={setEmail}
+        placeholderTextColor="#6F7D8C"
       />
       <TextInput
         style={styles.input}
@@ -45,6 +46,7 @@ export default function LoginScreen({ onLogin, onGoToRegister, error }: LoginScr
         secureTextEntry
         value={password}
         onChangeText={setPassword}
+        placeholderTextColor="#6F7D8C"
       />
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -80,6 +82,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
+    color: '#132238',
+    backgroundColor: '#FFFFFF',
   },
   primaryButton: {
     marginTop: 6,
