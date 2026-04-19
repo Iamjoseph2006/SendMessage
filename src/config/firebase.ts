@@ -17,18 +17,43 @@ const requiredEnvKeys: FirebaseEnvKey[] = [
   'EXPO_PUBLIC_FIREBASE_API_KEY',
   'EXPO_PUBLIC_FIREBASE_PROJECT_ID',
   'EXPO_PUBLIC_FIREBASE_APP_ID',
+  'EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN',
 ];
 
 const missingKeys = requiredEnvKeys.filter((key) => getEnv(key).length === 0);
 const hasAuthDomain = getEnv('EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN').length > 0;
 const appId = getEnv('EXPO_PUBLIC_FIREBASE_APP_ID');
 const isAndroidAppId = appId.includes(':android:');
+const isWebAppId = appId.includes(':web:');
 
-export const isFirebaseConfigured = missingKeys.length === 0;
+const firebaseConfigWarnings: string[] = [];
+
+if (isAndroidAppId) {
+  firebaseConfigWarnings.push(
+    `EXPO_PUBLIC_FIREBASE_APP_ID parece de Android (${appId}). Debes usar el appId de una Web App para el SDK JS en Expo.`,
+  );
+}
+
+if (!isWebAppId && appId) {
+  firebaseConfigWarnings.push(
+    `EXPO_PUBLIC_FIREBASE_APP_ID no tiene formato de Web App (:web:). Valor actual: ${appId}.`,
+  );
+}
+
+if (!hasAuthDomain) {
+  firebaseConfigWarnings.push('EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN está vacío.');
+}
+
+export const isFirebaseConfigured = missingKeys.length === 0 && !isAndroidAppId && hasAuthDomain && isWebAppId;
 
 export const firebaseConfigError = isFirebaseConfigured
   ? null
-  : `Configura las variables EXPO_PUBLIC_FIREBASE_* (faltan: ${missingKeys.join(', ')}).`;
+  : [
+    missingKeys.length > 0 ? `Faltan variables: ${missingKeys.join(', ')}.` : null,
+    ...firebaseConfigWarnings,
+  ]
+    .filter(Boolean)
+    .join(' ');
 
 const firebaseConfig = {
   apiKey: getEnv('EXPO_PUBLIC_FIREBASE_API_KEY'),
@@ -66,23 +91,22 @@ const auth: Auth | null = app ? createAuth(app) : null;
 const db: Firestore | null = app ? createFirestore(app) : null;
 
 if (!isFirebaseConfigured) {
-  console.error(`[firebase] Firebase NO configurado. Faltan variables: ${missingKeys.join(', ')}.`);
-} else {
-  console.log(
-    `[firebase] Firebase inicializado. projectId=${firebaseConfig.projectId}, appId=${firebaseConfig.appId}, authDomain=${firebaseConfig.authDomain || 'N/D'}`,
+  console.error(`[firebase] Firebase NO configurado correctamente. ${firebaseConfigError}`);
+  console.warn(
+    '[firebase] WARN: posible inconsistencia de backend Firebase entre dispositivos. Si un cliente usa appId Android y otro Web, no compartirán correctamente el mismo backend de Firestore/Auth para el SDK JS y verás docs_crudos=1 en ambos lados.',
   );
-
-  if (isAndroidAppId) {
-    console.warn(
-      `[firebase] EXPO_PUBLIC_FIREBASE_APP_ID parece de Android (${firebaseConfig.appId}). Para Expo/React Native con SDK Web de Firebase usa el appId de una Web App del mismo proyecto. Si dos dispositivos usan appId/proyecto distintos, users/{uid} se guardará en backends diferentes y el directorio no llegará a docs_crudos=2.`,
-    );
-  }
-
-  if (!hasAuthDomain) {
-    console.warn(
-      '[firebase] EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN está vacío. Aunque no siempre bloquea en React Native, se recomienda incluirlo desde la Web App de Firebase para evitar inconsistencias de autenticación entre dispositivos.',
-    );
-  }
+  console.log('[firebase] config:', {
+    projectId: firebaseConfig.projectId || 'N/D',
+    appId: firebaseConfig.appId || 'N/D',
+    authDomain: firebaseConfig.authDomain || 'N/D',
+  });
+} else {
+  console.log('[firebase] config:', {
+    projectId: firebaseConfig.projectId || 'N/D',
+    appId: firebaseConfig.appId || 'N/D',
+    authDomain: firebaseConfig.authDomain || 'N/D',
+  });
+  console.log('[firebase] Firebase inicializado correctamente para SDK Web en Expo.');
 }
 
 export const firestoreBaseUrl = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents`;
