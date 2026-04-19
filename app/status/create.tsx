@@ -53,16 +53,31 @@ export default function CreateStatusScreen() {
 
   const onPickImage = async () => {
     setError(null);
-    const result = await launchImageLibrary({ mediaType: 'photo', selectionLimit: 1 });
 
-    if (result.errorMessage) {
-      setError(result.errorMessage);
-      return;
-    }
+    try {
+      const result = await launchImageLibrary({ mediaType: 'photo', selectionLimit: 1 });
 
-    const uri = result.assets?.[0]?.uri;
-    if (uri) {
-      setSelectedImageUri(uri);
+      if (result.errorMessage) {
+        setError(result.errorMessage);
+        return;
+      }
+
+      const uri = result.assets?.[0]?.uri;
+      if (uri) {
+        setSelectedImageUri(uri);
+      }
+    } catch (pickImageError) {
+      const isUnavailableError =
+        pickImageError instanceof Error &&
+        pickImageError.message.includes("Cannot read property 'launchImageLibrary' of null");
+
+      setError(
+        isUnavailableError
+          ? 'El selector de imágenes no está disponible en Expo Go. Usa un Development Build para adjuntar fotos.'
+          : pickImageError instanceof Error
+            ? pickImageError.message
+            : 'No se pudo abrir la galería.',
+      );
     }
   };
 
