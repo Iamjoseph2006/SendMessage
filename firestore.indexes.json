@@ -69,10 +69,6 @@
           "arrayConfig": "CONTAINS"
         },
         {
-          "fieldPath": "lastMessageAt",
-          "order": "DESCENDING"
-        },
-        {
           "fieldPath": "updatedAt",
           "order": "DESCENDING"
         }
@@ -145,6 +141,20 @@
         {
           "fieldPath": "createdAt",
           "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "statusComments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "statusId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "ASCENDING"
         }
       ]
     }

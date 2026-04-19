@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/features/auth/hooks/useAuth';
 import { Chat } from '@/src/features/chat/services/chatService';
@@ -40,8 +40,10 @@ export default function ChatsScreen() {
         id: chat.id,
         contactUid,
         title: contact?.name || contact?.email || 'Sin nombre',
+        photoURL: contact?.photoURL ?? null,
         lastMessageAt: chat.lastMessageAt?.toMillis() ?? chat.updatedAt?.toMillis() ?? 0,
         lastMessageSenderId: chat.lastMessageSenderId || '',
+        unreadCount: chat.unreadCountByUser?.[user.uid] ?? 0,
         presenceLabel,
         subtitle: chat.lastMessage
           ? `${chat.lastMessageSenderId === user.uid ? 'Tú: ' : ''}${chat.lastMessage}`
@@ -97,14 +99,24 @@ export default function ChatsScreen() {
         renderItem={({ item }) => (
           <Pressable style={styles.chatRow} onPress={() => router.push(`/chat/${item.id}`)}>
             <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{getAvatarInitials(item.title)}</Text>
+              {item.photoURL ? (
+                <Image source={{ uri: item.photoURL }} style={styles.avatarImageWrap} />
+              ) : (
+                <Text style={styles.avatarText}>{getAvatarInitials(item.title)}</Text>
+              )}
             </View>
             <View style={styles.textWrap}>
               <View style={styles.nameRow}>
                 <Text style={[styles.name, { color: palette.textPrimary }]}>{item.title}</Text>
-                <Text style={[styles.presence, { color: item.presenceLabel === 'En línea' ? '#14A44D' : palette.textSecondary }]}>
-                  {item.presenceLabel}
-                </Text>
+                {item.unreadCount > 0 ? (
+                  <View style={styles.unreadBadge}>
+                    <Text style={styles.unreadText}>{item.unreadCount > 99 ? '99+' : item.unreadCount}</Text>
+                  </View>
+                ) : (
+                  <Text style={[styles.presence, { color: item.presenceLabel === 'En línea' ? '#14A44D' : palette.textSecondary }]}>
+                    {item.presenceLabel}
+                  </Text>
+                )}
               </View>
               <Text numberOfLines={1} style={[styles.lastMessage, { color: palette.textSecondary }]}>
                 {item.subtitle}
@@ -145,10 +157,21 @@ const styles = StyleSheet.create({
     backgroundColor: '#BFD7F7',
   },
   avatarText: { fontWeight: '700', fontSize: 18, color: '#234' },
+  avatarImageWrap: { width: 52, height: 52, borderRadius: 26, overflow: 'hidden' },
   textWrap: { flex: 1, gap: 2 },
   nameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   name: { fontSize: 16, fontWeight: '700' },
   presence: { fontSize: 12, fontWeight: '600' },
+  unreadBadge: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#1F7AE0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  unreadText: { color: '#FFF', fontWeight: '700', fontSize: 12 },
   lastMessage: { fontSize: 13 },
   fab: {
     position: 'absolute',
