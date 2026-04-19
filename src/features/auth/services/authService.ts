@@ -1,5 +1,5 @@
 import { AuthError, User, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile } from 'firebase/auth';
-import { doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import { FirestoreError, doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { auth, db, firebaseConfigError } from '@/src/config/firebase';
 import { mapFirebaseErrorToSpanish } from '@/src/config/firebaseErrors';
 
@@ -22,6 +22,8 @@ type NormalizedUserProfile = {
 };
 
 const FIRESTORE_PROFILE_WRITE_TIMEOUT_MS = 12000;
+const PROFILE_SYNC_MAX_RETRIES = 3;
+const PROFILE_SYNC_RETRY_DELAY_MS = 1200;
 
 const toTrimmedString = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
 
@@ -111,7 +113,7 @@ const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, message: s
 
 
 const isNonBlockingProfileSyncError = (error: unknown): boolean => {
-  const firebaseError = error as Partial<AuthError> & { message?: string; code?: string };
+  const firebaseError = error as Partial<AuthError & FirestoreError> & { message?: string; code?: string };
   const normalizedCode = firebaseError?.code?.replace(/^auth\//, '') ?? firebaseError?.code ?? '';
   const normalizedMessage = firebaseError?.message?.toLowerCase() ?? '';
 
@@ -123,35 +125,52 @@ const isNonBlockingProfileSyncError = (error: unknown): boolean => {
   );
 };
 
-const hasMissingRequiredFields = (
-  source: Record<string, unknown> | undefined,
-  uid: string,
-): boolean => {
-  const sourceUid = typeof source?.uid === 'string' ? source.uid.trim() : '';
-  const sourceEmail = typeof source?.email === 'string' ? source.email.trim() : '';
-  const sourceName = typeof source?.name === 'string' ? source.name.trim() : '';
-
-  return !sourceUid || sourceUid !== uid || !sourceEmail || !sourceName;
+const getFirebaseLikeErrorCode = (error: unknown): string => {
+  const firebaseError = error as Partial<AuthError & FirestoreError> & { code?: string };
+  return firebaseError?.code ?? 'unknown';
 };
+
+const wait = (ms: number) => new Promise<void>((resolve) => {
+  setTimeout(resolve, ms);
+});
 
 const syncUserProfileSafely = async (firebaseUser: User): Promise<void> => {
   if (!firebaseUser.email) {
     return;
   }
 
-  try {
-    const profilePayload = normalizeProfilePayload(firebaseUser.uid, {
-      email: firebaseUser.email,
-      name: firebaseUser.displayName ?? '',
-    });
-    await ensureUserDocument(firebaseUser.uid, profilePayload);
-  } catch (error) {
-    if (isNonBlockingProfileSyncError(error)) {
-      console.warn('No se pudo sincronizar perfil en Firestore durante login, se continuará con sesión autenticada.', error);
-      return;
-    }
+  const profilePayload = normalizeProfilePayload(firebaseUser.uid, {
+    email: firebaseUser.email,
+    name: firebaseUser.displayName ?? '',
+  });
 
-    throw error;
+  for (let attempt = 1; attempt <= PROFILE_SYNC_MAX_RETRIES; attempt += 1) {
+    try {
+      console.log(`[authService] Intentando sincronizar users/${firebaseUser.uid} (intento ${attempt}/${PROFILE_SYNC_MAX_RETRIES}).`);
+      await ensureUserDocument(firebaseUser.uid, profilePayload);
+      return;
+    } catch (error) {
+      const errorCode = getFirebaseLikeErrorCode(error);
+      const canRetry = isNonBlockingProfileSyncError(error) && attempt < PROFILE_SYNC_MAX_RETRIES;
+
+      console.warn(
+        `[authService] Sync users/${firebaseUser.uid} falló (code=${errorCode}) en intento ${attempt}/${PROFILE_SYNC_MAX_RETRIES}.`,
+        error,
+      );
+
+      if (!canRetry) {
+        if (isNonBlockingProfileSyncError(error)) {
+          console.warn(
+            `[authService] No se pudo sincronizar users/${firebaseUser.uid} tras ${PROFILE_SYNC_MAX_RETRIES} intentos. Se mantiene sesión autenticada.`,
+          );
+          return;
+        }
+
+        throw error;
+      }
+
+      await wait(PROFILE_SYNC_RETRY_DELAY_MS * attempt);
+    }
   }
 };
 
@@ -159,9 +178,31 @@ export const ensureUserDocument = async (uid: string, payload: EnsureUserProfile
   const firestoreClient = getFirestoreClient();
   const normalizedProfile = normalizeProfilePayload(uid, payload);
   const userRef = doc(firestoreClient, 'users', normalizedProfile.uid);
-  const userSnapshot = await getDoc(userRef);
 
-  if (!userSnapshot.exists()) {
+  try {
+    await updateDoc(userRef, {
+      email: normalizedProfile.email,
+      name: normalizedProfile.name,
+      uid: normalizedProfile.uid,
+      online: true,
+      updatedAt: serverTimestamp(),
+    });
+    console.log(`[authService] Perfil users/${normalizedProfile.uid} actualizado en Firestore.`);
+    return;
+  } catch (error) {
+    const firestoreError = error as Partial<FirestoreError> & { message?: string };
+    const code = firestoreError.code ?? 'unknown';
+    console.warn(
+      `[authService] updateDoc users/${normalizedProfile.uid} falló (code=${code}). Se intentará crear/reparar documento con setDoc.`,
+      error,
+    );
+
+    if (code && code !== 'not-found') {
+      throw error;
+    }
+  }
+
+  try {
     await setDoc(userRef, {
       uid: normalizedProfile.uid,
       email: normalizedProfile.email,
@@ -170,40 +211,15 @@ export const ensureUserDocument = async (uid: string, payload: EnsureUserProfile
       updatedAt: serverTimestamp(),
       online: true,
     });
-    console.log(`[authService] Perfil users/${normalizedProfile.uid} creado desde Auth.`);
-    return;
-  }
-
-  const currentData = userSnapshot.data();
-  const requiresRepair = hasMissingRequiredFields(currentData, normalizedProfile.uid);
-
-  if (requiresRepair) {
-    await setDoc(
-      userRef,
-      {
-        uid: normalizedProfile.uid,
-        email: normalizedProfile.email,
-        name: normalizedProfile.name,
-        online: Boolean(currentData?.online),
-        createdAt: currentData?.createdAt ?? serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      },
-      { merge: true },
+    console.log(`[authService] Perfil users/${normalizedProfile.uid} creado/reparado en Firestore.`);
+  } catch (error) {
+    const firestoreError = error as Partial<FirestoreError> & { message?: string };
+    console.error(
+      `[authService] Error creando/reparando users/${normalizedProfile.uid} (code=${firestoreError.code ?? 'unknown'}).`,
+      error,
     );
-    console.warn(`[authService] Perfil users/${normalizedProfile.uid} reparado por campos faltantes.`);
-    return;
+    throw error;
   }
-
-  const currentName = typeof currentData?.name === 'string' ? currentData.name.trim() : '';
-  const currentEmail = typeof currentData?.email === 'string' ? currentData.email.trim() : '';
-
-  await updateDoc(userRef, {
-    ...(currentEmail !== normalizedProfile.email ? { email: normalizedProfile.email } : {}),
-    ...(currentName ? {} : { name: normalizedProfile.name }),
-    ...(currentData?.uid ? {} : { uid: normalizedProfile.uid }),
-    online: true,
-    updatedAt: serverTimestamp(),
-  }).catch(() => undefined);
 };
 
 export const registerUser = async (email: string, password: string, name: string): Promise<AppUser> => {

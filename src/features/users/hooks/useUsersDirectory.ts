@@ -20,11 +20,13 @@ export const useUsersDirectory = (excludeUid: string | null) => {
 
     const bootstrapUsers = async () => {
       try {
+        console.log(`[useUsersDirectory] Cargando directorio inicial. excludeUid=${excludeUid}.`);
         const initialUsers = await getUsers(excludeUid);
         if (isActive) {
           setUsers(initialUsers);
         }
       } catch (bootstrapError) {
+        console.error('[useUsersDirectory] Error al cargar usuarios iniciales.', bootstrapError);
         if (isActive) {
           setError(
             bootstrapError instanceof Error
@@ -48,6 +50,7 @@ export const useUsersDirectory = (excludeUid: string | null) => {
           return;
         }
 
+        console.log(`[useUsersDirectory] Directorio actualizado por snapshot. users=${nextUsers.length}.`);
         setUsers(nextUsers);
         setLoading(false);
         setError(null);
@@ -57,6 +60,7 @@ export const useUsersDirectory = (excludeUid: string | null) => {
           return;
         }
 
+        console.error('[useUsersDirectory] Error escuchando directorio de usuarios.', listenError);
         setError(listenError.message);
         setLoading(false);
       },
