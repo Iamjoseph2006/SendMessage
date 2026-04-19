@@ -3,7 +3,7 @@ import { Audio } from 'expo-av';
 import * as Location from 'expo-location';
 import { Stack, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { launchImageLibrary } from 'react-native-image-picker';
+import DocumentPicker, { types } from 'react-native-document-picker';
 import {
   ActivityIndicator,
   Image,
@@ -22,6 +22,7 @@ import { CreateStatusInput, StatusLocation, createStatus } from '@/src/features/
 import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
 
 const EMOJIS = ['😀', '😂', '😍', '🔥', '🙏', '💙', '🎉', '😎'];
+const SAVE_TIMEOUT_MS = 15000;
 
 export default function CreateStatusScreen() {
   const { user } = useAuth();
@@ -53,16 +54,16 @@ export default function CreateStatusScreen() {
 
   const onPickImage = async () => {
     setError(null);
-    const result = await launchImageLibrary({ mediaType: 'photo', selectionLimit: 1 });
 
-    if (result.errorMessage) {
-      setError(result.errorMessage);
-      return;
-    }
+    try {
+      const file = await DocumentPicker.pickSingle({ type: [types.images], copyTo: 'cachesDirectory' });
+      setSelectedImageUri(file.fileCopyUri ?? file.uri);
+    } catch (pickError) {
+      if (DocumentPicker.isCancel(pickError)) {
+        return;
+      }
 
-    const uri = result.assets?.[0]?.uri;
-    if (uri) {
-      setSelectedImageUri(uri);
+      setError('No se pudo abrir la galería del celular.');
     }
   };
 
@@ -79,7 +80,6 @@ export default function CreateStatusScreen() {
     setLocation({
       latitude: current.coords.latitude,
       longitude: current.coords.longitude,
-      label: `${current.coords.latitude.toFixed(4)}, ${current.coords.longitude.toFixed(4)}`,
     });
   };
 
@@ -114,7 +114,7 @@ export default function CreateStatusScreen() {
   };
 
   const onCreateStatus = async () => {
-    if (!user?.uid || !hasAnyContent) {
+    if (!user?.uid || !hasAnyContent || saving) {
       return;
     }
 
@@ -129,8 +129,12 @@ export default function CreateStatusScreen() {
       emojis: pickedEmojis,
     };
 
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error('La publicación tardó demasiado. Revisa internet e inténtalo de nuevo.')), SAVE_TIMEOUT_MS);
+    });
+
     try {
-      await createStatus(user.uid, payload);
+      await Promise.race([createStatus(user.uid, payload), timeoutPromise]);
       setContent('');
       setSelectedImageUri(null);
       setAudioUri(null);
@@ -145,7 +149,7 @@ export default function CreateStatusScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background }]}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background }]}> 
       <Stack.Screen options={{ title: 'Nuevo estado' }} />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.safeArea}>
         <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
@@ -194,9 +198,9 @@ export default function CreateStatusScreen() {
           {selectedImageUri ? <Image source={{ uri: selectedImageUri }} style={styles.previewImage} resizeMode="cover" /> : null}
 
           {location ? (
-            <View style={styles.chipInfo}>
-              <Ionicons name="location" size={14} color="#1F7AE0" />
-              <Text style={styles.chipText}>Ubicación adjunta: {location.label}</Text>
+            <View style={styles.locationBadge}>
+              <Ionicons name="location" size={18} color="#1F7AE0" />
+              <Text style={styles.locationBadgeText}>Ubicación adjunta</Text>
             </View>
           ) : null}
 
@@ -254,6 +258,17 @@ const styles = StyleSheet.create({
   emojiChipActive: { borderColor: '#1F7AE0', backgroundColor: '#EAF3FF' },
   emojiText: { fontSize: 17 },
   previewImage: { width: '100%', height: 200, borderRadius: 14 },
+  locationBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    backgroundColor: '#EAF3FF',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  locationBadgeText: { color: '#1F7AE0', fontWeight: '700', fontSize: 13 },
   chipInfo: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   chipText: { color: '#47617F', fontSize: 13 },
   publishButton: {
