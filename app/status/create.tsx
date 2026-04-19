@@ -27,6 +27,7 @@ import { CreateStatusInput, StatusLocation, createStatus } from '@/src/features/
 import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
 
 const EMOJIS = ['😀', '😂', '😍', '🔥', '🙏', '💙', '🎉', '😎'];
+const TEXT_BG_COLORS = ['#1F7AE0', '#3F8C5A', '#8A4FFF', '#C96200', '#29323D', '#BE2F6B'];
 const SAVE_TIMEOUT_MS = 15000;
 
 export default function CreateStatusScreen() {
@@ -44,6 +45,7 @@ export default function CreateStatusScreen() {
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const [isRecording, setIsRecording] = useState(false);
   const [audioUri, setAudioUri] = useState<string | null>(null);
+  const [backgroundColor, setBackgroundColor] = useState<string>(TEXT_BG_COLORS[0]);
 
   useEffect(() => {
     return () => {
@@ -140,6 +142,7 @@ export default function CreateStatusScreen() {
       audioUri,
       location,
       emojis: pickedEmojis,
+      backgroundColor: !selectedImageUri && !audioUri && !location ? backgroundColor : null,
     };
 
     const timeoutPromise = new Promise<never>((_, reject) => {
@@ -153,6 +156,7 @@ export default function CreateStatusScreen() {
       setAudioUri(null);
       setLocation(null);
       setPickedEmojis([]);
+      setBackgroundColor(TEXT_BG_COLORS[0]);
       router.back();
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : 'No se pudo crear el estado.');
@@ -167,23 +171,37 @@ export default function CreateStatusScreen() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.safeArea}>
         <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
           <Text style={[styles.label, { color: palette.textPrimary }]}>Crea tu estado</Text>
-          <TextInput
-            value={content}
-            onChangeText={setContent}
-            editable={!saving}
-            multiline
-            autoFocus
-            placeholder="Escribe algo para tu estado..."
-            placeholderTextColor={palette.textSecondary}
-            style={[
-              styles.input,
-              {
-                color: palette.textPrimary,
-                borderColor: palette.border,
-                backgroundColor: palette.surface,
-              },
-            ]}
-          />
+          <View style={[styles.textStatusWrap, { backgroundColor: !selectedImageUri && !audioUri && !location ? backgroundColor : palette.surface }]}>
+            <TextInput
+              value={content}
+              onChangeText={setContent}
+              editable={!saving}
+              multiline
+              autoFocus
+              placeholder="Escribe algo para tu estado..."
+              placeholderTextColor={selectedImageUri || audioUri || location ? palette.textSecondary : '#E4EEFF'}
+              style={[
+                styles.input,
+                {
+                  color: selectedImageUri || audioUri || location ? palette.textPrimary : '#FFFFFF',
+                  borderColor: palette.border,
+                  backgroundColor: 'transparent',
+                },
+              ]}
+            />
+          </View>
+
+          {!selectedImageUri && !audioUri && !location ? (
+            <View style={styles.paletteRow}>
+              {TEXT_BG_COLORS.map((color) => (
+                <Pressable
+                  key={color}
+                  onPress={() => setBackgroundColor(color)}
+                  style={[styles.colorDot, { backgroundColor: color }, backgroundColor === color ? styles.colorDotActive : null]}
+                />
+              ))}
+            </View>
+          ) : null}
 
           <View style={styles.actionsRow}>
             <Pressable style={styles.actionButton} onPress={onTakePhoto}>
@@ -252,6 +270,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
     textAlignVertical: 'top',
   },
+  textStatusWrap: { borderRadius: 14, padding: 2 },
+  paletteRow: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
+  colorDot: { width: 30, height: 30, borderRadius: 15, borderWidth: 2, borderColor: '#FFFFFF55' },
+  colorDotActive: { borderColor: '#FFFFFF', transform: [{ scale: 1.06 }] },
   actionsRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   actionButton: {
     flexDirection: 'row',

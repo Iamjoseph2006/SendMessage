@@ -79,8 +79,26 @@ service cloud.firestore {
       allow create: if isSignedIn()
         && request.resource.data.userId == request.auth.uid
         && request.resource.data.content is string;
-      allow update: if isSignedIn() && request.auth.uid == resource.data.userId;
+      allow update: if isSignedIn()
+        && (
+          request.auth.uid == resource.data.userId
+          || (
+            request.resource.data.userId == resource.data.userId
+            && request.resource.data.content == resource.data.content
+            && request.resource.data.type == resource.data.type
+          )
+        );
       allow delete: if isSignedIn() && request.auth.uid == resource.data.userId;
+    }
+
+    match /statusComments/{commentId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.statusId is string
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0;
+      allow update, delete: if false;
     }
   }
 }

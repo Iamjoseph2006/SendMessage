@@ -9,6 +9,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  increment,
   onSnapshot,
   orderBy,
   query,
@@ -32,6 +33,8 @@ export type Chat = {
   lastMessageAt?: Timestamp | null;
   pinnedMessageId?: string | null;
   pinnedAt?: Timestamp | null;
+  unreadCountByUser?: Record<string, number>;
+  lastReadAtByUser?: Record<string, Timestamp | null>;
 };
 
 export type ChatMessageType = 'text' | 'image' | 'audio' | 'location';
@@ -114,8 +117,6 @@ const mapFirestoreError = (error: unknown): Error => {
   return mapFirebaseErrorToSpanish(error, 'Ocurrió un error inesperado con Firestore.');
 };
 
-const isMissingIndexError = (error: unknown) => (error as Partial<FirestoreError>)?.code === 'failed-precondition';
-
 const buildMessagePreview = (input: SendMessageInput): string => {
   if (input.type === 'image') {
     return input.text?.trim() ? `📷 ${input.text.trim()}` : '📷 Imagen';
@@ -143,13 +144,14 @@ const mapChat = (id: string, data: Record<string, unknown>): Chat => ({
   lastMessageAt: (data.lastMessageAt as Timestamp | undefined) ?? null,
   pinnedMessageId: (data.pinnedMessageId as string | undefined) ?? null,
   pinnedAt: (data.pinnedAt as Timestamp | undefined) ?? null,
+  unreadCountByUser: (data.unreadCountByUser as Record<string, number> | undefined) ?? {},
+  lastReadAtByUser: (data.lastReadAtByUser as Record<string, Timestamp | null> | undefined) ?? {},
 });
 
 const buildUserChatsQuery = (uid: string) =>
   query(
     collection(requireDb(), 'chats'),
     where('participants', 'array-contains', uid),
-    orderBy('lastMessageAt', 'desc'),
     orderBy('updatedAt', 'desc'),
   );
 
@@ -215,6 +217,14 @@ export const createChat = async (userId1: string, userId2: string): Promise<stri
         lastMessageAt: null,
         pinnedMessageId: null,
         pinnedAt: null,
+        unreadCountByUser: {
+          [firstUid]: 0,
+          [secondUid]: 0,
+        },
+        lastReadAtByUser: {
+          [firstUid]: null,
+          [secondUid]: null,
+        },
       });
     }
 
@@ -243,52 +253,27 @@ export const getChatById = async (chatId: string): Promise<Chat | null> => {
 };
 
 export const getUserChats = async (uid: string): Promise<Chat[]> => {
-  const firestore = requireDb();
-
   try {
     const snapshot = await getDocs(buildUserChatsQuery(uid));
 
     return snapshot.docs.map((docSnapshot) => mapChat(docSnapshot.id, docSnapshot.data()));
   } catch (error) {
-    if (isMissingIndexError(error)) {
-      const fallbackQuery = query(collection(firestore, 'chats'), where('participants', 'array-contains', uid), orderBy('updatedAt', 'desc'));
-      const fallbackSnapshot = await getDocs(fallbackQuery);
-      return fallbackSnapshot.docs.map((docSnapshot) => mapChat(docSnapshot.id, docSnapshot.data()));
-    }
     throw mapFirestoreError(error);
   }
 };
 
 export const listenUserChats = (uid: string, callback: (chats: Chat[]) => void, onError?: (error: Error) => void) => {
-  const firestore = requireDb();
   const primaryQuery = buildUserChatsQuery(uid);
-  const fallbackQuery = query(collection(firestore, 'chats'), where('participants', 'array-contains', uid), orderBy('updatedAt', 'desc'));
-
-  let unsubscribe = onSnapshot(
+  const unsubscribe = onSnapshot(
     primaryQuery,
     (snapshot) => {
       const chats = snapshot.docs.map((docSnapshot) => mapChat(docSnapshot.id, docSnapshot.data()));
       callback(chats);
     },
-    (error) => {
-      if (isMissingIndexError(error)) {
-        unsubscribe();
-        unsubscribe = onSnapshot(
-          fallbackQuery,
-          (snapshot) => {
-            const chats = snapshot.docs.map((docSnapshot) => mapChat(docSnapshot.id, docSnapshot.data()));
-            callback(chats);
-          },
-          (fallbackError) => onError?.(mapFirestoreError(fallbackError)),
-        );
-        return;
-      }
-
-      onError?.(mapFirestoreError(error));
-    },
+    (error) => onError?.(mapFirestoreError(error)),
   );
 
-  return () => unsubscribe();
+  return unsubscribe;
 };
 
 export const sendMessage = async (chatId: string, text: string, senderId: string, type: ChatMessageType = 'text'): Promise<string> =>
@@ -333,6 +318,14 @@ export const sendMessagePayload = async (chatId: string, input: SendMessageInput
         lastMessageAt: null,
         pinnedMessageId: null,
         pinnedAt: null,
+        unreadCountByUser: {
+          [firstUid]: 0,
+          [secondUid]: 0,
+        },
+        lastReadAtByUser: {
+          [firstUid]: null,
+          [secondUid]: null,
+        },
       });
 
       chatSnapshot = await getDoc(chatRef);
@@ -361,12 +354,23 @@ export const sendMessagePayload = async (chatId: string, input: SendMessageInput
       createdAt: serverTimestamp(),
     });
 
+    const unreadUpdate = chat.participants.reduce<Record<string, unknown>>((acc, participantId) => {
+      if (participantId === input.senderId) {
+        acc[`unreadCountByUser.${participantId}`] = 0;
+        return acc;
+      }
+
+      acc[`unreadCountByUser.${participantId}`] = increment(1);
+      return acc;
+    }, {});
+
     await updateDoc(chatRef, {
       lastMessage: buildMessagePreview({ ...input, text: normalizedText, type }),
       lastMessageType: type,
       lastMessageSenderId: input.senderId,
       lastMessageAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
+      ...unreadUpdate,
     });
 
     return created.id;
@@ -458,4 +462,13 @@ export const listenMessages = (
     },
     (error) => onError?.(mapFirestoreError(error)),
   );
+};
+
+export const markChatAsRead = async (chatId: string, userId: string): Promise<void> => {
+  const firestore = requireDb();
+  await updateDoc(doc(firestore, 'chats', chatId), {
+    [`unreadCountByUser.${userId}`]: 0,
+    [`lastReadAtByUser.${userId}`]: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
 };

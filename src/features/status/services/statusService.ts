@@ -38,6 +38,7 @@ export type StatusItem = {
   emojis?: string[];
   location?: StatusLocation | null;
   viewedBy?: string[];
+  backgroundColor?: string | null;
   expiresAt?: Timestamp | null;
   createdAt?: Timestamp | null;
 };
@@ -48,6 +49,15 @@ export type CreateStatusInput = {
   audioUri?: string | null;
   emojis?: string[];
   location?: StatusLocation | null;
+  backgroundColor?: string | null;
+};
+
+export type StatusComment = {
+  id: string;
+  statusId: string;
+  userId: string;
+  text: string;
+  createdAt?: Timestamp | null;
 };
 
 const STATUS_DURATION_MS = 24 * 60 * 60 * 1000;
@@ -120,6 +130,7 @@ const mapStatus = (id: string, data: Record<string, any>): StatusItem => {
         }
       : null,
     viewedBy: (data.viewedBy as string[] | undefined) ?? [],
+    backgroundColor: (data.backgroundColor as string | undefined) ?? null,
     expiresAt: (data.expiresAt as Timestamp | undefined) ?? null,
     createdAt: (data.createdAt as Timestamp | undefined) ?? null,
   };
@@ -153,6 +164,7 @@ export const createStatus = async (userId: string, contentOrInput: string | Crea
       viewedBy: [userId],
       location: input.location ? new GeoPoint(input.location.latitude, input.location.longitude) : null,
       locationLabel: input.location?.label ?? null,
+      backgroundColor: input.backgroundColor ?? null,
       createdAt: serverTimestamp(),
       expiresAt: Timestamp.fromMillis(Date.now() + STATUS_DURATION_MS),
     });
@@ -231,4 +243,48 @@ export const deleteStatus = async (statusId: string): Promise<void> => {
   } catch (error) {
     throw mapFirestoreError(error);
   }
+};
+
+const mapComment = (id: string, data: Record<string, unknown>): StatusComment => ({
+  id,
+  statusId: (data.statusId as string | undefined) ?? '',
+  userId: (data.userId as string | undefined) ?? '',
+  text: ((data.text as string | undefined) ?? '').trim(),
+  createdAt: (data.createdAt as Timestamp | undefined) ?? null,
+});
+
+export const addStatusComment = async (statusId: string, userId: string, text: string): Promise<string> => {
+  const firestore = requireDb();
+  const normalizedText = text.trim();
+  if (!normalizedText) {
+    throw new Error('El comentario no puede estar vacío.');
+  }
+
+  const created = await addDoc(collection(firestore, 'statusComments'), {
+    statusId,
+    userId,
+    text: normalizedText,
+    createdAt: serverTimestamp(),
+  });
+
+  return created.id;
+};
+
+export const listenStatusComments = (
+  statusId: string,
+  callback: (comments: StatusComment[]) => void,
+  onError?: (error: Error) => void,
+) => {
+  const firestore = requireDb();
+  const commentsQuery = query(
+    collection(firestore, 'statusComments'),
+    where('statusId', '==', statusId),
+    orderBy('createdAt', 'asc'),
+  );
+
+  return onSnapshot(
+    commentsQuery,
+    (snapshot) => callback(snapshot.docs.map((item) => mapComment(item.id, item.data()))),
+    (error) => onError?.(mapFirestoreError(error)),
+  );
 };

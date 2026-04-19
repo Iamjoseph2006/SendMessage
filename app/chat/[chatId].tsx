@@ -29,7 +29,7 @@ import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/features/auth/hooks/useAuth';
 import { useChat } from '@/src/features/chat/hooks/useChat';
-import { ChatLocation, ChatMessage, getChatById } from '@/src/features/chat/services/chatService';
+import { ChatLocation, ChatMessage, getChatById, markChatAsRead } from '@/src/features/chat/services/chatService';
 import { UserProfile, getUsersByUids, listenUserById } from '@/src/features/users/services/userService';
 import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
 
@@ -64,6 +64,7 @@ export default function ConversationScreen() {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const listRef = useRef<FlatList<ChatMessage>>(null);
+  const hasAutoScrolledRef = useRef(false);
 
   const {
     messages,
@@ -98,11 +99,16 @@ export default function ConversationScreen() {
   const pinnedMessage = useMemo(() => visibleMessages.find((message) => message.isPinned), [visibleMessages]);
 
   useEffect(() => {
-    const timeout = setTimeout(() => {
-      listRef.current?.scrollToEnd({ animated: true });
-    }, 40);
-    return () => clearTimeout(timeout);
-  }, [visibleMessages.length]);
+    if (!visibleMessages.length) {
+      return;
+    }
+
+    const shouldAnimate = hasAutoScrolledRef.current;
+    requestAnimationFrame(() => {
+      listRef.current?.scrollToEnd({ animated: shouldAnimate });
+      hasAutoScrolledRef.current = true;
+    });
+  }, [visibleMessages]);
 
   useEffect(() => {
     const showSub = Keyboard.addListener('keyboardDidShow', () => {
@@ -113,6 +119,14 @@ export default function ConversationScreen() {
       showSub.remove();
     };
   }, []);
+
+  useEffect(() => {
+    if (!chatId || !user?.uid) {
+      return;
+    }
+
+    markChatAsRead(chatId, user.uid).catch(() => undefined);
+  }, [chatId, user?.uid]);
 
   useEffect(() => {
     if (!chatId || !user?.uid) {
@@ -289,20 +303,23 @@ export default function ConversationScreen() {
     <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background }]}> 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 44 : 0}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 6 : 0}
         style={styles.safeArea}>
         <View style={[styles.header, { borderBottomColor: palette.border, backgroundColor: palette.surface }]}> 
           <Pressable onPress={() => router.back()} style={styles.backButton}>
             <Ionicons name="chevron-back" size={22} color={palette.textPrimary} />
           </Pressable>
-          <View style={styles.headerTextWrap}>
+          <Pressable style={styles.headerTextWrap} onPress={() => router.push(`/chat/info/${chatId}`)}>
             <Text style={[styles.headerName, { color: palette.textPrimary }]} numberOfLines={1}>
               {chatName}
             </Text>
             <Text style={[styles.headerSubtitle, { color: contactProfile?.online ? '#14A44D' : palette.textSecondary }]} numberOfLines={1}>
               {availabilityLabel}
             </Text>
-          </View>
+          </Pressable>
+          <Pressable onPress={() => router.push(`/chat/info/${chatId}`)} style={styles.infoButton}>
+            <Ionicons name="information-circle-outline" size={21} color={palette.textSecondary} />
+          </Pressable>
         </View>
 
         {pinnedMessage ? (
@@ -324,7 +341,6 @@ export default function ConversationScreen() {
           contentContainerStyle={[styles.listContent, { paddingBottom: 24 + insets.bottom }]}
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           keyboardShouldPersistTaps="handled"
-          onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
           ListEmptyComponent={!loading ? emptyState : null}
           renderItem={({ item }) => {
             const isMe = item.senderId === user?.uid;
@@ -368,7 +384,15 @@ export default function ConversationScreen() {
           </View>
         ) : null}
 
-        <View style={[styles.composer, { borderTopColor: palette.border, backgroundColor: palette.surface, paddingBottom: Math.max(10, insets.bottom) }]}> 
+        <View
+          style={[
+            styles.composer,
+            {
+              borderTopColor: palette.border,
+              backgroundColor: palette.surface,
+              paddingBottom: Platform.OS === 'ios' ? Math.max(6, insets.bottom - 2) : 8,
+            },
+          ]}>
           <Pressable style={styles.attachButton} onPress={openPicker}>
             <Ionicons name="add" size={20} color={palette.textPrimary} />
           </Pressable>
@@ -410,6 +434,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerTextWrap: { flex: 1, gap: 1 },
+  infoButton: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   headerName: { fontSize: 18, fontWeight: '700' },
   headerSubtitle: { fontSize: 12, fontWeight: '600' },
   pinnedBar: { flexDirection: 'row', gap: 8, borderBottomWidth: 1, paddingHorizontal: 12, paddingVertical: 8, alignItems: 'center' },

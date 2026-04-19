@@ -7,6 +7,7 @@ import {
   deleteMessageForMe,
   editMessage,
   listenMessages,
+  markChatAsRead,
   sendMessage,
   sendMessagePayload,
   togglePinMessage,
@@ -68,6 +69,23 @@ export const useChat = (chatId: string | null, senderId: string | null): UseChat
 
     return unsubscribe;
   }, [chatId]);
+
+  useEffect(() => {
+    if (!chatId || !senderId) {
+      return;
+    }
+
+    if (!messages.length) {
+      return;
+    }
+
+    const latest = messages[messages.length - 1];
+    if (latest.senderId === senderId) {
+      return;
+    }
+
+    markChatAsRead(chatId, senderId).catch(() => undefined);
+  }, [chatId, messages, senderId]);
 
   const canSend = useMemo(() => Boolean(chatId && senderId && input.trim().length > 0), [chatId, input, senderId]);
 
