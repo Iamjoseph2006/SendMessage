@@ -1,5 +1,11 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Audio } from 'expo-av';
+import {
+  AudioModule,
+  RecordingPresets,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync,
+} from 'expo-audio';
+import type { AudioRecorder } from 'expo-audio';
 import * as Location from 'expo-location';
 import { Stack, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
@@ -35,13 +41,13 @@ export default function CreateStatusScreen() {
   const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
   const [location, setLocation] = useState<StatusLocation | null>(null);
   const [pickedEmojis, setPickedEmojis] = useState<string[]>([]);
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [recording, setRecording] = useState<AudioRecorder | null>(null);
   const [audioUri, setAudioUri] = useState<string | null>(null);
 
   useEffect(() => {
     return () => {
       if (recording) {
-        recording.stopAndUnloadAsync().catch(() => undefined);
+        recording.stop().catch(() => undefined);
       }
     };
   }, [recording]);
@@ -79,8 +85,8 @@ export default function CreateStatusScreen() {
     setError(null);
 
     if (recording) {
-      await recording.stopAndUnloadAsync();
-      const uri = recording.getURI();
+      await recording.stop();
+      const uri = recording.uri;
       setRecording(null);
       if (uri) {
         setAudioUri(uri);
@@ -88,16 +94,16 @@ export default function CreateStatusScreen() {
       return;
     }
 
-    const permission = await Audio.requestPermissionsAsync();
+    const permission = await requestRecordingPermissionsAsync();
     if (!permission.granted) {
       setError('No se concedió permiso para grabar audio.');
       return;
     }
 
-    await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
-    const nextRecording = new Audio.Recording();
-    await nextRecording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-    await nextRecording.startAsync();
+    await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+    const nextRecording = new AudioModule.AudioRecorder(RecordingPresets.HIGH_QUALITY);
+    await nextRecording.prepareToRecordAsync();
+    nextRecording.record();
     setRecording(nextRecording);
   };
 
