@@ -5,7 +5,8 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/features/auth/hooks/useAuth';
 import { StatusItem, listenStatuses } from '@/src/features/status/services/statusService';
-import { buildMyStatusSubtitle, getRelativeStatusTime, getStatusPreview, getUserInitial } from '@/src/features/status/utils/statusFormat';
+import { buildMyStatusSubtitle, getRelativeStatusTime, getStatusPreview } from '@/src/features/status/utils/statusFormat';
+import { getAvatarInitials } from '@/src/shared/utils/avatar';
 import { getUsersByUids } from '@/src/features/users/services/userService';
 import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
 
@@ -81,7 +82,7 @@ export default function StatusScreen() {
           onPress={() => router.push('/status/my')}>
           <View style={styles.avatarWrap}>
             <View style={[styles.avatar, { backgroundColor: isDark ? '#253650' : '#EAF3FF' }]}>
-              <Text style={[styles.avatarText, { color: palette.accent }]}>{getUserInitial(user?.displayName ?? user?.email)}</Text>
+              <Text style={[styles.avatarText, { color: palette.accent }]}>{getAvatarInitials(user?.displayName ?? user?.email)}</Text>
             </View>
             <View style={styles.addBadge}>
               <Ionicons name="add" size={14} color="#FFFFFF" />

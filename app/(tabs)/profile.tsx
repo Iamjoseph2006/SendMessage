@@ -7,6 +7,7 @@ import { useAuth } from '@/src/features/auth/hooks/useAuth';
 import { listenProfile } from '@/src/features/profile/services/profileService';
 import { UserProfile } from '@/src/features/users/services/userService';
 import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
+import { getAvatarInitials } from '@/src/shared/utils/avatar';
 
 const options = [
   { id: 'account', icon: 'person-circle-outline', label: 'Cuenta' },
@@ -86,7 +87,7 @@ export default function ProfileScreen() {
         <View style={[styles.headerCard, { borderColor: palette.border, backgroundColor: palette.surface }]}> 
           <View style={[styles.profilePhoto, { backgroundColor: isDark ? '#21314A' : '#D9EAFF' }]}> 
             <Text style={[styles.profileInitial, { color: palette.textPrimary }]}>
-              {(displayName || 'U').charAt(0)}
+              {getAvatarInitials(displayName)}
             </Text>
           </View>
           <Text style={[styles.name, { color: palette.textPrimary }]}>{displayName}</Text>

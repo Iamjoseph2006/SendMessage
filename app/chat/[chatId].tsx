@@ -247,7 +247,7 @@ export default function ConversationScreen() {
     <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background }]}> 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 44 : 0}
         style={styles.safeArea}>
         <View style={[styles.header, { borderBottomColor: palette.border, backgroundColor: palette.surface }]}> 
           <Pressable onPress={() => router.back()} style={styles.backButton}>
@@ -274,7 +274,7 @@ export default function ConversationScreen() {
           ref={listRef}
           data={visibleMessages}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={[styles.listContent, { paddingBottom: 12 + insets.bottom }]}
+          contentContainerStyle={[styles.listContent, { paddingBottom: 24 + insets.bottom }]}
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           keyboardShouldPersistTaps="handled"
           onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
@@ -321,7 +321,7 @@ export default function ConversationScreen() {
           </View>
         ) : null}
 
-        <View style={[styles.composer, { borderTopColor: palette.border, backgroundColor: palette.surface }]}> 
+        <View style={[styles.composer, { borderTopColor: palette.border, backgroundColor: palette.surface, paddingBottom: Math.max(10, insets.bottom) }]}> 
           <Pressable style={styles.attachButton} onPress={openPicker}>
             <Ionicons name="add" size={20} color={palette.textPrimary} />
           </Pressable>

@@ -428,12 +428,20 @@ export const updateUserName = async (uid: string, name: string) => {
   }
 
   try {
+    const userRef = doc(firestore, 'users', uid);
+    const existingSnapshot = await getDoc(userRef);
+    const existingData = existingSnapshot.exists() ? existingSnapshot.data() : {};
+    const fallbackEmail = asTrimmedString(existingData.email) || (auth?.currentUser?.uid === uid ? auth.currentUser.email?.trim() ?? '' : '');
+
     await setDoc(
-      doc(firestore, 'users', uid),
+      userRef,
       {
         uid,
+        email: fallbackEmail,
         name: nextName,
+        createdAt: existingData.createdAt ?? serverTimestamp(),
         updatedAt: serverTimestamp(),
+        online: typeof existingData.online === 'boolean' ? existingData.online : true,
       },
       { merge: true },
     );

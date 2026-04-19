@@ -6,6 +6,7 @@ import { useAuth } from '@/src/features/auth/hooks/useAuth';
 import { createOrGetChat } from '@/src/features/chat/services/chatService';
 import { useUsersDirectory } from '@/src/features/users/hooks/useUsersDirectory';
 import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
+import { getAvatarInitials } from '@/src/shared/utils/avatar';
 
 export default function NewChatScreen() {
   const { user } = useAuth();
@@ -61,7 +62,7 @@ export default function NewChatScreen() {
               disabled={startingChatWith === item.uid}
               onPress={() => openOrCreateChat(item.uid)}>
               <View style={styles.avatar}>
-                <Text style={styles.avatarText}>{displayName.charAt(0).toUpperCase()}</Text>
+                <Text style={styles.avatarText}>{getAvatarInitials(displayName)}</Text>
               </View>
 
               <View style={styles.textWrap}>

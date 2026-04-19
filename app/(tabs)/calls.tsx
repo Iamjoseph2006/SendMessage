@@ -6,6 +6,7 @@ import { useAuth } from '@/src/features/auth/hooks/useAuth';
 import { createCall, listenCallHistory, CallLog, CallType } from '@/src/features/calls/services/callService';
 import { getUsers, UserProfile } from '@/src/features/users/services/userService';
 import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
+import { getAvatarInitials } from '@/src/shared/utils/avatar';
 
 export default function CallsScreen() {
   const { user } = useAuth();
@@ -97,7 +98,7 @@ export default function CallsScreen() {
           return (
             <View style={[styles.row, { backgroundColor: palette.surface, borderColor: palette.border }]} key={directoryUser.uid}>
               <View style={[styles.avatar, { backgroundColor: isDark ? '#20314A' : '#E8F1FF' }]}>
-                <Text style={[styles.avatarText, { color: palette.textPrimary }]}>{displayName.charAt(0).toUpperCase()}</Text>
+                <Text style={[styles.avatarText, { color: palette.textPrimary }]}>{getAvatarInitials(displayName)}</Text>
               </View>
               <View style={styles.dataWrap}>
                 <Text style={[styles.name, { color: palette.textPrimary }]}>{displayName}</Text>
