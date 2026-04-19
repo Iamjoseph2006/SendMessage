@@ -308,16 +308,9 @@ export const registerUser = async (email: string, password: string, name: string
     });
 
     try {
-      logProfileWriteContext(credentials.user.uid, 'registerUser:setDoc');
+      logProfileWriteContext(credentials.user.uid, 'registerUser:ensureUserDocument');
       await withTimeout(
-        setDoc(doc(getFirestoreClient(), 'users', credentials.user.uid), {
-          uid: credentials.user.uid,
-          email: profilePayload.email,
-          name: profilePayload.name,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-          online: true,
-        }),
+        ensureUserDocument(credentials.user.uid, profilePayload),
         FIRESTORE_PROFILE_WRITE_TIMEOUT_MS,
         'profile-write-timeout',
       );

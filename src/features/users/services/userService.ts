@@ -201,16 +201,29 @@ const ensureAuthenticatedUserDoc = async (firebaseUser: FirebaseUser): Promise<v
   const firestore = requireDb();
   const normalizedEmail = firebaseUser.email?.trim() ?? '';
   const normalizedName = firebaseUser.displayName?.trim() || normalizedEmail || 'Usuario';
+  const userRef = doc(firestore, 'users', firebaseUser.uid);
+  let existingCreatedAt: unknown = null;
+
+  try {
+    const existingSnapshot = await getDoc(userRef);
+    existingCreatedAt = existingSnapshot.exists() ? existingSnapshot.data()?.createdAt : null;
+  } catch (readError) {
+    const firestoreError = readError as Partial<FirestoreError>;
+    console.warn(
+      `[userService] No se pudo leer users/${firebaseUser.uid} antes de autorreparar. code=${firestoreError?.code ?? 'unknown'}.`,
+      readError,
+    );
+  }
 
   try {
     await setDoc(
-      doc(firestore, 'users', firebaseUser.uid),
+      userRef,
       {
         uid: firebaseUser.uid,
         email: normalizedEmail,
         name: normalizedName,
         updatedAt: serverTimestamp(),
-        createdAt: serverTimestamp(),
+        createdAt: existingCreatedAt ?? serverTimestamp(),
         online: true,
       },
       { merge: true },
