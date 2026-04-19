@@ -13,14 +13,30 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid in participants;
     }
 
+    function isValidUserDocFor(uid, data) {
+      return data.uid == uid
+        && data.uid == request.auth.uid
+        && data.email is string
+        && data.email.size() > 0
+        && data.name is string
+        && data.name.size() > 0
+        && data.createdAt != null;
+    }
+
     match /users/{uid} {
       allow read: if isSignedIn();
-      allow create: if isSelf(uid) && request.resource.data.uid == request.auth.uid;
+
+      allow create: if isSelf(uid)
+        && isValidUserDocFor(uid, request.resource.data);
+
       allow update: if isSelf(uid)
-        && (
-          !('uid' in request.resource.data)
-          || request.resource.data.uid == request.auth.uid
-        );
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.email is string
+        && request.resource.data.email.size() > 0
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.createdAt == resource.data.createdAt;
+
       allow delete: if false;
     }
 

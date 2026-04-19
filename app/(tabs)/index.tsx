@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/features/auth/hooks/useAuth';
@@ -27,6 +27,20 @@ export default function ChatsScreen() {
     [directory],
   );
 
+
+  useEffect(() => {
+    if (usersError) {
+      console.error(`[ChatsScreen] Error al leer colección users: ${usersError}`);
+    }
+  }, [usersError]);
+
+  useEffect(() => {
+    console.log('[ChatsScreen] Estado directorio usuarios', {
+      uidActual: user?.uid ?? null,
+      totalUsuarios: directory.length,
+      cargandoUsuarios: usersLoading,
+    });
+  }, [directory.length, user?.uid, usersLoading]);
   const rows = useMemo(() => {
     if (!user?.uid) {
       return [];
@@ -72,7 +86,11 @@ export default function ChatsScreen() {
 
       {loading ? <ActivityIndicator style={styles.loading} size="large" /> : null}
 
-      {screenError || usersError || chatsError ? <Text style={styles.error}>{screenError ?? usersError ?? chatsError}</Text> : null}
+      {screenError || usersError || chatsError ? (
+        <Text style={styles.error}>
+          {screenError ?? usersError ?? chatsError}
+        </Text>
+      ) : null}
 
       <FlatList
         data={rows}
@@ -112,7 +130,7 @@ export default function ChatsScreen() {
                 usersLoading ? (
                   <ActivityIndicator style={styles.loading} size="small" />
                 ) : (
-                  <Text style={[styles.empty, { color: palette.textSecondary }]}>No hay usuarios disponibles.</Text>
+                  <Text style={[styles.empty, { color: palette.textSecondary }]}>No hay otros usuarios disponibles en Firestore.</Text>
                 )
               }
               renderItem={({ item }) => {
