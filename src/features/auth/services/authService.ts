@@ -245,14 +245,22 @@ export const logoutUser = async (): Promise<void> => {
   const authClient = getAuthClient();
   const uid = authClient.currentUser?.uid;
 
-  if (uid) {
-    await updateDoc(doc(getFirestoreClient(), 'users', uid), {
-      online: false,
-      updatedAt: serverTimestamp(),
-    }).catch(() => undefined);
+  await signOut(authClient);
+
+  if (!uid) {
+    return;
   }
 
-  await signOut(authClient);
+  if (!db) {
+    return;
+  }
+
+  void updateDoc(doc(db, 'users', uid), {
+    online: false,
+    updatedAt: serverTimestamp(),
+  }).catch((error) => {
+    console.warn('No se pudo marcar al usuario como desconectado en Firestore.', error);
+  });
 };
 
 export const repairAuthenticatedUserProfile = async (firebaseUser: User | null): Promise<void> => {
