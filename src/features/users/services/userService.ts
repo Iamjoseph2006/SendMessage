@@ -67,7 +67,6 @@ export const listenUsers = (
 
       const filteredUsers = users.sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email));
 
-      console.log('Usuarios Firestore:', filteredUsers);
       callback(filteredUsers);
     },
     (error) => onError?.(mapFirestoreError(error)),
@@ -105,7 +104,6 @@ export const getUserById = async (uid: string): Promise<UserProfile | null> => {
   }
 
   const profile = mapUser(userSnapshot.data(), userSnapshot.id);
-  console.log('[users/getUserById] Perfil de usuario', profile);
   return profile;
 };
 
@@ -125,7 +123,6 @@ export const listenUserById = (
       }
 
       const profile = mapUser(snapshot.data(), snapshot.id);
-      console.log('[users/listenUserById] Perfil en tiempo real', profile);
       callback(profile);
     },
     (error) => onError?.(mapFirestoreError(error)),
@@ -172,6 +169,5 @@ export const getUsersByUids = async (uids: string[]): Promise<UserProfile[]> => 
   }
 
   const users = snapshot.docs.map((docSnapshot) => mapUser(docSnapshot.data(), docSnapshot.id));
-  console.log('[users/getUsersByUids] Usuarios por uid', users);
   return users;
 };

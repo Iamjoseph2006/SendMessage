@@ -66,7 +66,7 @@ const normalizeAuthError = (error: unknown): Error => {
   return new Error('No fue posible completar la autenticación.');
 };
 
-const ensureUserDocument = async (
+export const ensureUserDocument = async (
   uid: string,
   payload: {
     email: string;
@@ -167,6 +167,18 @@ export const logoutUser = async (): Promise<void> => {
   }
 
   await signOut(authClient);
+};
+
+
+export const syncAuthenticatedUserProfile = async (firebaseUser: User | null): Promise<void> => {
+  if (!firebaseUser?.uid || !firebaseUser.email) {
+    return;
+  }
+
+  await ensureUserDocument(firebaseUser.uid, {
+    email: firebaseUser.email,
+    name: firebaseUser.displayName?.trim() || firebaseUser.email,
+  });
 };
 
 export const getCurrentUser = async (): Promise<AppUser | null> => {

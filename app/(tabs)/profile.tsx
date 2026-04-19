@@ -41,9 +41,6 @@ export default function ProfileScreen() {
       user.uid,
       (nextProfile) => {
         setProfile(nextProfile);
-        if (nextProfile) {
-          console.log('Nombre:', nextProfile.name);
-        }
         setLoading(false);
       },
       (listenError) => {

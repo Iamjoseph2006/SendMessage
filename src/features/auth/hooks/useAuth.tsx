@@ -1,7 +1,13 @@
 import { onAuthStateChanged } from 'firebase/auth';
 import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
 import { auth } from '@/src/config/firebase';
-import { AppUser, loginUser, logoutUser, registerUser } from '@/src/features/auth/services/authService';
+import {
+  AppUser,
+  loginUser,
+  logoutUser,
+  registerUser,
+  syncAuthenticatedUserProfile,
+} from '@/src/features/auth/services/authService';
 
 type AuthState = {
   user: AppUser | null;
@@ -50,6 +56,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       auth,
       async (firebaseUser) => {
         try {
+          await syncAuthenticatedUserProfile(firebaseUser);
           const mappedUser = await mapUser(firebaseUser);
           setUser(mappedUser);
           setError(null);
