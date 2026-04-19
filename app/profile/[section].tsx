@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Switch, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
 
@@ -49,7 +49,7 @@ export default function ProfileSectionScreen() {
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background }]}>
       <Stack.Screen options={{ title: current.title }} />
-      <View style={styles.container}>
+      <ScrollView contentContainerStyle={styles.container}>
         <View style={[styles.hero, { borderColor: palette.border, backgroundColor: palette.surface }]}>
           <Ionicons name={current.icon} size={24} color={palette.accent} />
           <Text style={[styles.heroTitle, { color: palette.textPrimary }]}>{current.title}</Text>
@@ -74,7 +74,7 @@ export default function ProfileSectionScreen() {
             />
           </View>
         ))}
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }

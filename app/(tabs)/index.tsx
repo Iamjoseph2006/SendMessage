@@ -1,10 +1,10 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useMemo } from 'react';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/features/auth/hooks/useAuth';
-import { Chat, createOrGetChat } from '@/src/features/chat/services/chatService';
+import { Chat } from '@/src/features/chat/services/chatService';
 import { useUserChats } from '@/src/features/chat/hooks/useUserChats';
 import { useUsersDirectory } from '@/src/features/users/hooks/useUsersDirectory';
 import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
@@ -12,15 +12,11 @@ import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme
 export default function ChatsScreen() {
   const { user } = useAuth();
   const { chats, loading, error: chatsError } = useUserChats(user?.uid ?? null);
-  const { users: directory, loading: usersLoading, error: usersError } = useUsersDirectory(user?.uid ?? null);
+  const { users: directory, error: usersError } = useUsersDirectory(user?.uid ?? null);
   const { isDark } = useAppTheme();
   const palette = isDark ? darkPalette : lightPalette;
   const router = useRouter();
   const insets = useSafeAreaInsets();
-
-  const [showUsersModal, setShowUsersModal] = useState(false);
-  const [startingChatWith, setStartingChatWith] = useState<string | null>(null);
-  const [screenError, setScreenError] = useState<string | null>(null);
 
   const usersByUid = useMemo(
     () => new Map(directory.map((directoryUser) => [directoryUser.uid, directoryUser])),
@@ -45,25 +41,6 @@ export default function ChatsScreen() {
     });
   }, [chats, user?.uid, usersByUid]);
 
-  const openOrCreateChat = async (contactUid: string) => {
-    if (!user?.uid) {
-      return;
-    }
-
-    setScreenError(null);
-    setStartingChatWith(contactUid);
-
-    try {
-      const chatId = await createOrGetChat(user.uid, contactUid);
-      setShowUsersModal(false);
-      router.push(`/chat/${chatId}`);
-    } catch (error) {
-      setScreenError(error instanceof Error ? error.message : 'No fue posible crear la conversación.');
-    } finally {
-      setStartingChatWith(null);
-    }
-  };
-
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background }]}>
       <View style={[styles.header, { paddingTop: insets.top + 4 }]}> 
@@ -72,9 +49,9 @@ export default function ChatsScreen() {
 
       {loading ? <ActivityIndicator style={styles.loading} size="large" /> : null}
 
-      {screenError || usersError || chatsError ? (
+      {usersError || chatsError ? (
         <Text style={styles.error}>
-          {screenError ?? usersError ?? chatsError}
+          {usersError ?? chatsError}
         </Text>
       ) : null}
 
@@ -100,48 +77,9 @@ export default function ChatsScreen() {
         )}
       />
 
-      <Pressable style={styles.fab} onPress={() => setShowUsersModal(true)}>
+      <Pressable style={styles.fab} onPress={() => router.push('/chat/new')}>
         <Ionicons name="chatbubble-ellipses" size={22} color="#FFF" />
       </Pressable>
-
-      <Modal visible={showUsersModal} transparent animationType="slide" onRequestClose={() => setShowUsersModal(false)}>
-        <Pressable style={styles.modalBackdrop} onPress={() => setShowUsersModal(false)}>
-          <Pressable style={[styles.modalCard, { backgroundColor: palette.surface }]} onPress={() => undefined}>
-            <Text style={[styles.modalTitle, { color: palette.textPrimary }]}>Iniciar nuevo chat</Text>
-
-            <FlatList
-              data={directory}
-              keyExtractor={(item) => item.uid}
-              ListEmptyComponent={
-                usersLoading ? (
-                  <ActivityIndicator style={styles.loading} size="small" />
-                ) : (
-                  <Text style={[styles.empty, { color: palette.textSecondary }]}>No hay otros usuarios disponibles en Firestore.</Text>
-                )
-              }
-              renderItem={({ item }) => {
-                const displayName = item.name || item.email;
-
-                return (
-                  <Pressable
-                    style={styles.userRow}
-                    disabled={startingChatWith === item.uid}
-                    onPress={() => openOrCreateChat(item.uid)}>
-                    <View style={styles.avatarSmall}>
-                      <Text style={styles.avatarText}>{displayName.charAt(0).toUpperCase()}</Text>
-                    </View>
-                    <View style={styles.textWrap}>
-                      <Text style={[styles.name, { color: palette.textPrimary }]}>{displayName}</Text>
-                      <Text style={[styles.lastMessage, { color: palette.textSecondary }]}>{item.email}</Text>
-                    </View>
-                    {startingChatWith === item.uid ? <ActivityIndicator size="small" /> : null}
-                  </Pressable>
-                );
-              }}
-            />
-          </Pressable>
-        </Pressable>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -159,24 +97,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
-  userRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 10,
-  },
   avatar: {
     width: 52,
     height: 52,
     borderRadius: 26,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#BFD7F7',
-  },
-  avatarSmall: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#BFD7F7',
@@ -197,20 +121,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     elevation: 3,
   },
-  modalBackdrop: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.28)',
-  },
-  modalCard: {
-    maxHeight: '70%',
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 26,
-  },
-  modalTitle: { fontSize: 20, fontWeight: '700', marginBottom: 14 },
   error: { color: '#D93025', marginHorizontal: 16, marginBottom: 8 },
   empty: { textAlign: 'center', marginTop: 24 },
 });

@@ -1,14 +1,15 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/features/auth/hooks/useAuth';
-import { listenProfile, updateProfileName } from '@/src/features/profile/services/profileService';
+import { listenProfile } from '@/src/features/profile/services/profileService';
 import { UserProfile } from '@/src/features/users/services/userService';
 import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
 
 const options = [
+  { id: 'account', icon: 'person-circle-outline', label: 'Cuenta' },
   { id: 'notifications', icon: 'notifications-outline', label: 'Notificaciones' },
   { id: 'privacy', icon: 'lock-closed-outline', label: 'Privacidad' },
   { id: 'appearance', icon: 'color-palette-outline', label: 'Apariencia' },
@@ -25,9 +26,6 @@ export default function ProfileScreen() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [nextName, setNextName] = useState('');
-  const [savingName, setSavingName] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
   const displayName = profile?.name?.trim() || user?.displayName?.trim() || profile?.email || user?.email || 'Sin nombre';
@@ -54,44 +52,6 @@ export default function ProfileScreen() {
 
     return unsubscribe;
   }, [user?.uid]);
-
-  const openEditProfile = () => {
-    setError(null);
-    setNextName(profile?.name || user?.displayName || '');
-    setShowEditModal(true);
-  };
-
-  const saveProfileName = async () => {
-    if (!user?.uid) {
-      return;
-    }
-
-    const normalizedName = nextName.trim();
-    const currentName = (profile?.name || '').trim();
-
-    if (!normalizedName) {
-      setError('El nombre no puede estar vacío.');
-      return;
-    }
-
-    if (normalizedName === currentName) {
-      setShowEditModal(false);
-      return;
-    }
-
-    setSavingName(true);
-    setError(null);
-
-    try {
-      await updateProfileName(user.uid, normalizedName);
-      setShowEditModal(false);
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'No fue posible guardar tu nombre.');
-    } finally {
-      setSavingName(false);
-    }
-  };
-
 
   const handleLogout = async () => {
     if (loggingOut) {
@@ -122,7 +82,7 @@ export default function ProfileScreen() {
       <View style={[styles.header, { paddingTop: insets.top + 4 }]}> 
         <Text style={[styles.headerTitle, { color: palette.textPrimary }]}>Perfil</Text>
       </View>
-      <View style={styles.container}>
+      <ScrollView contentContainerStyle={styles.container}>
         <View style={[styles.headerCard, { borderColor: palette.border, backgroundColor: palette.surface }]}> 
           <View style={[styles.profilePhoto, { backgroundColor: isDark ? '#21314A' : '#D9EAFF' }]}> 
             <Text style={[styles.profileInitial, { color: palette.textPrimary }]}>
@@ -131,7 +91,7 @@ export default function ProfileScreen() {
           </View>
           <Text style={[styles.name, { color: palette.textPrimary }]}>{displayName}</Text>
           <Text style={[styles.email, { color: palette.textSecondary }]}>{displayEmail}</Text>
-          <Pressable style={styles.editButton} onPress={openEditProfile}>
+          <Pressable style={styles.editButton} onPress={() => router.push('/profile/edit')}>
             <Text style={styles.editButtonText}>Editar perfil</Text>
           </Pressable>
           {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -151,40 +111,7 @@ export default function ProfileScreen() {
         <Pressable style={styles.logoutButton} disabled={loggingOut} onPress={handleLogout}>
           {loggingOut ? <ActivityIndicator color="#C62828" size="small" /> : <Text style={styles.logoutText}>Cerrar sesión</Text>}
         </Pressable>
-      </View>
-
-      <Modal visible={showEditModal} transparent animationType="fade" onRequestClose={() => setShowEditModal(false)}>
-        <Pressable style={styles.modalBackdrop} onPress={() => setShowEditModal(false)}>
-          <Pressable style={[styles.modalCard, { backgroundColor: palette.surface }]} onPress={() => undefined}>
-            <Text style={[styles.modalTitle, { color: palette.textPrimary }]}>Editar perfil</Text>
-            <TextInput
-              value={nextName}
-              onChangeText={setNextName}
-              editable={!savingName}
-              autoCapitalize="words"
-              placeholder="Tu nombre"
-              placeholderTextColor={palette.textSecondary}
-              style={[
-                styles.input,
-                {
-                  color: palette.textPrimary,
-                  borderColor: palette.border,
-                  backgroundColor: isDark ? '#121A28' : '#F8FBFF',
-                },
-              ]}
-            />
-
-            <View style={styles.modalActions}>
-              <Pressable style={styles.cancelButton} disabled={savingName} onPress={() => setShowEditModal(false)}>
-                <Text style={styles.cancelButtonText}>Cancelar</Text>
-              </Pressable>
-              <Pressable style={styles.saveButton} disabled={savingName} onPress={saveProfileName}>
-                {savingName ? <ActivityIndicator color="#FFF" size="small" /> : <Text style={styles.saveButtonText}>Guardar</Text>}
-              </Pressable>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -193,7 +120,7 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#FFF' },
   header: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 },
   headerTitle: { fontSize: 34, fontWeight: '800', color: '#1A2B44' },
-  container: { padding: 16, gap: 12 },
+  container: { padding: 16, gap: 12, paddingBottom: 40 },
   headerCard: {
     borderRadius: 18,
     borderWidth: 1,
@@ -242,45 +169,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logoutText: { color: '#C62828', fontWeight: '700' },
-  modalBackdrop: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.35)',
-  },
-  modalCard: {
-    width: '88%',
-    borderRadius: 16,
-    padding: 16,
-    gap: 12,
-  },
-  modalTitle: { fontSize: 18, fontWeight: '700' },
-  input: {
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-  },
-  modalActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 10,
-  },
-  cancelButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    backgroundColor: '#F1F4F9',
-  },
-  cancelButtonText: { color: '#42526B', fontWeight: '700' },
-  saveButton: {
-    minWidth: 90,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    backgroundColor: '#1F7AE0',
-    alignItems: 'center',
-  },
-  saveButtonText: { color: '#FFF', fontWeight: '700' },
 });
