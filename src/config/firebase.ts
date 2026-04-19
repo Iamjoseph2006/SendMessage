@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FirebaseApp, getApp, getApps, initializeApp } from 'firebase/app';
 import { Auth, getAuth, getReactNativePersistence, initializeAuth } from 'firebase/auth';
-import { Firestore, initializeFirestore } from 'firebase/firestore';
+import { Firestore, getFirestore, initializeFirestore } from 'firebase/firestore';
 
 type FirebaseEnvKey =
   | 'EXPO_PUBLIC_FIREBASE_API_KEY'
@@ -52,14 +52,20 @@ const createAuth = (firebaseApp: FirebaseApp): Auth => {
   }
 };
 
-const auth: Auth | null = app ? createAuth(app) : null;
-const db: Firestore | null = app
-  ? initializeFirestore(app, {
+const createFirestore = (firebaseApp: FirebaseApp): Firestore => {
+  try {
+    return initializeFirestore(firebaseApp, {
       experimentalForceLongPolling: true,
       // @ts-expect-error useFetchStreams is supported by Firestore Web SDK at runtime and prevents stream abort loops in Expo/WebView.
       useFetchStreams: false,
-    })
-  : null;
+    });
+  } catch {
+    return getFirestore(firebaseApp);
+  }
+};
+
+const auth: Auth | null = app ? createAuth(app) : null;
+const db: Firestore | null = app ? createFirestore(app) : null;
 
 export const firestoreBaseUrl = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents`;
 export const authBaseUrl = 'https://identitytoolkit.googleapis.com/v1';
