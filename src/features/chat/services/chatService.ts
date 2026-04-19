@@ -61,6 +61,9 @@ export type ChatMessage = {
   isPinned?: boolean;
   isStarredBy?: string[];
   deletedFor?: string[];
+  reactions?: Record<string, string[]>;
+  deliveredAt?: Timestamp | null;
+  readAt?: Timestamp | null;
 };
 
 export type SendMessageInput = {
@@ -148,12 +151,7 @@ const mapChat = (id: string, data: Record<string, unknown>): Chat => ({
   lastReadAtByUser: (data.lastReadAtByUser as Record<string, Timestamp | null> | undefined) ?? {},
 });
 
-const buildUserChatsQuery = (uid: string) =>
-  query(
-    collection(requireDb(), 'chats'),
-    where('participants', 'array-contains', uid),
-    orderBy('updatedAt', 'desc'),
-  );
+const buildUserChatsQuery = (uid: string) => query(collection(requireDb(), 'chats'), where('participants', 'array-contains', uid));
 
 const mapMessage = (id: string, data: Record<string, unknown>): ChatMessage => ({
   id,
@@ -171,6 +169,9 @@ const mapMessage = (id: string, data: Record<string, unknown>): ChatMessage => (
   isPinned: Boolean(data.isPinned),
   isStarredBy: (data.isStarredBy as string[] | undefined) ?? [],
   deletedFor: (data.deletedFor as string[] | undefined) ?? [],
+  reactions: (data.reactions as Record<string, string[]> | undefined) ?? {},
+  deliveredAt: (data.deliveredAt as Timestamp | undefined) ?? null,
+  readAt: (data.readAt as Timestamp | undefined) ?? null,
 });
 
 const fetchBlobFromUri = async (uri: string) => {
@@ -256,18 +257,25 @@ export const getUserChats = async (uid: string): Promise<Chat[]> => {
   try {
     const snapshot = await getDocs(buildUserChatsQuery(uid));
 
-    return snapshot.docs.map((docSnapshot) => mapChat(docSnapshot.id, docSnapshot.data()));
+    return snapshot.docs
+      .map((docSnapshot) => mapChat(docSnapshot.id, docSnapshot.data()))
+      .sort((a, b) => (b.lastMessageAt?.toMillis() ?? b.updatedAt?.toMillis() ?? 0) - (a.lastMessageAt?.toMillis() ?? a.updatedAt?.toMillis() ?? 0));
   } catch (error) {
     throw mapFirestoreError(error);
   }
 };
 
 export const listenUserChats = (uid: string, callback: (chats: Chat[]) => void, onError?: (error: Error) => void) => {
-  const primaryQuery = buildUserChatsQuery(uid);
+  const chatsQuery = buildUserChatsQuery(uid);
   const unsubscribe = onSnapshot(
-    primaryQuery,
+    chatsQuery,
     (snapshot) => {
-      const chats = snapshot.docs.map((docSnapshot) => mapChat(docSnapshot.id, docSnapshot.data()));
+      const chats = snapshot.docs
+        .map((docSnapshot) => mapChat(docSnapshot.id, docSnapshot.data()))
+        .sort(
+          (a, b) =>
+            (b.lastMessageAt?.toMillis() ?? b.updatedAt?.toMillis() ?? 0) - (a.lastMessageAt?.toMillis() ?? a.updatedAt?.toMillis() ?? 0),
+        );
       callback(chats);
     },
     (error) => onError?.(mapFirestoreError(error)),
@@ -351,6 +359,9 @@ export const sendMessagePayload = async (chatId: string, input: SendMessageInput
       isPinned: false,
       isStarredBy: [],
       deletedFor: [],
+      reactions: {},
+      deliveredAt: serverTimestamp(),
+      readAt: null,
       createdAt: serverTimestamp(),
     });
 
@@ -462,6 +473,24 @@ export const listenMessages = (
     },
     (error) => onError?.(mapFirestoreError(error)),
   );
+};
+
+export const reactToMessage = async (
+  messageId: string,
+  userId: string,
+  emoji: string,
+  previousEmoji?: string | null,
+): Promise<void> => {
+  const firestore = requireDb();
+  const messageRef = doc(firestore, 'messages', messageId);
+  if (previousEmoji && previousEmoji !== emoji) {
+    await updateDoc(messageRef, {
+      [`reactions.${previousEmoji}`]: arrayRemove(userId),
+    });
+  }
+  await updateDoc(messageRef, {
+    [`reactions.${emoji}`]: arrayUnion(userId),
+  });
 };
 
 export const markChatAsRead = async (chatId: string, userId: string): Promise<void> => {
