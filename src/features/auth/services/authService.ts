@@ -70,7 +70,7 @@ const normalizeProfilePayload = (uid: string, payload: EnsureUserProfilePayload)
   return {
     uid: normalizedUid,
     email: normalizedEmail,
-    name: normalizedName || normalizedEmail,
+    name: normalizedName || normalizedEmail || 'Usuario',
   };
 };
 

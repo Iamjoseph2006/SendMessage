@@ -10,6 +10,7 @@ export type UserProfile = {
   photoURL: string | null;
   online: boolean;
   createdAt?: Timestamp | null;
+  updatedAt?: Timestamp | null;
 };
 
 const requireDb = () => {
@@ -39,28 +40,103 @@ const normalizeUid = (source: Record<string, unknown>, documentId: string): stri
   return sourceUid || documentId;
 };
 
-const mapUser = (source: Record<string, unknown>, documentId: string): UserProfile => ({
-  uid: normalizeUid(source, documentId),
-  email: (source.email as string | undefined) ?? '',
-  name: (source.name as string | undefined) ?? '',
-  photoURL: (source.photoURL as string | null | undefined) ?? null,
-  online: Boolean(source.online),
-  createdAt: (source.createdAt as Timestamp | undefined) ?? null,
-});
+const asTrimmedString = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
+
+const resolveFallbackName = (source: Record<string, unknown>, email: string): string => {
+  const directName = asTrimmedString(source.name);
+  const displayName = asTrimmedString(source.displayName);
+  return directName || displayName || email || 'Usuario';
+};
+
+const mapUser = (source: Record<string, unknown>, documentId: string): UserProfile => {
+  const email = asTrimmedString(source.email);
+  const name = resolveFallbackName(source, email);
+
+  return {
+    uid: normalizeUid(source, documentId),
+    email,
+    name,
+    photoURL: (source.photoURL as string | null | undefined) ?? null,
+    online: Boolean(source.online),
+    createdAt: (source.createdAt as Timestamp | undefined) ?? null,
+    updatedAt: (source.updatedAt as Timestamp | undefined) ?? null,
+  };
+};
+
+const repairInFlight = new Set<string>();
+
+const autoRepairUserDocument = async (
+  documentId: string,
+  source: Record<string, unknown>,
+  reason: string,
+): Promise<void> => {
+  if (repairInFlight.has(documentId)) {
+    return;
+  }
+
+  const firestore = requireDb();
+  const uid = normalizeUid(source, documentId);
+  if (!uid) {
+    return;
+  }
+
+  const email = asTrimmedString(source.email) || (auth?.currentUser?.uid === uid ? auth.currentUser.email?.trim() ?? '' : '');
+  const name = resolveFallbackName(
+    {
+      ...source,
+      displayName: asTrimmedString(source.displayName) || (auth?.currentUser?.uid === uid ? auth.currentUser.displayName ?? '' : ''),
+    },
+    email,
+  );
+
+  repairInFlight.add(documentId);
+  try {
+    await setDoc(
+      doc(firestore, 'users', documentId),
+      {
+        uid,
+        email,
+        name,
+        online: typeof source.online === 'boolean' ? source.online : false,
+        createdAt: source.createdAt ?? serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true },
+    );
+    console.log(
+      `[userService] users/${documentId} autoreparado. razón=${reason} uid=${uid} email=${email || '(vacío)'} name=${name}.`,
+    );
+  } catch (error) {
+    const firestoreError = error as Partial<FirestoreError>;
+    console.error(
+      `[userService] Falló autoreparación users/${documentId}. razón=${reason} code=${firestoreError?.code ?? 'unknown'} message=${firestoreError?.message ?? 'N/D'}`,
+      error,
+    );
+  } finally {
+    repairInFlight.delete(documentId);
+  }
+};
 
 const isValidUserDocument = (source: Record<string, unknown>, documentId: string): boolean => {
   const uid = normalizeUid(source, documentId);
-  const email = typeof source.email === 'string' ? source.email.trim() : '';
-  const name = typeof source.name === 'string' ? source.name.trim() : '';
+  const email = asTrimmedString(source.email);
+  const name = resolveFallbackName(source, email);
 
   if (!uid) {
-    console.warn(`[userService] Documento users/${documentId} ignorado: uid vacío.`);
+    console.warn(`[userService] Documento users/${documentId} descartado: uid vacío. fields=${JSON.stringify(Object.keys(source))}`);
     return false;
   }
 
   if (!email && !name) {
-    console.warn(`[userService] Documento users/${documentId} ignorado: faltan email y name.`);
+    console.warn(
+      `[userService] Documento users/${documentId} descartado: faltan email y name incluso con fallback. fields=${JSON.stringify(source)}`,
+    );
+    void autoRepairUserDocument(documentId, source, 'faltan-email-y-name');
     return false;
+  }
+
+  if (!asTrimmedString(source.uid) || !asTrimmedString(source.name) || typeof source.online !== 'boolean' || !source.createdAt) {
+    void autoRepairUserDocument(documentId, source, 'campos-minimos-faltantes');
   }
 
   return true;
@@ -92,30 +168,31 @@ const dedupeUsersByUid = (users: UserProfile[]): UserProfile[] => {
 };
 
 const mapUsersFromSnapshot = (docs: { id: string; data: () => Record<string, unknown> }[], currentUserUid?: string) => {
-  const users = docs
-    .map((docSnapshot) => ({ id: docSnapshot.id, data: docSnapshot.data() }))
-    .filter(({ id, data }) => isValidUserDocument(data, id))
-    .map(({ id, data }) => mapUser(data, id));
+  const mappedEntries = docs.map((docSnapshot) => ({ id: docSnapshot.id, data: docSnapshot.data() }));
+  const users = mappedEntries.filter(({ id, data }) => isValidUserDocument(data, id)).map(({ id, data }) => mapUser(data, id));
+  const dedupedUsers = dedupeUsersByUid(users).sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email));
+  const usersBeforeExclude = dedupedUsers.length;
+  const finalUsers = dedupedUsers.filter((user) => user.uid !== currentUserUid);
 
-  return dedupeUsersByUid(users)
-    .filter((user) => user.uid !== currentUserUid)
-    .sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email));
+  return {
+    users: finalUsers,
+    rawDocs: docs.length,
+    validBeforeExclude: usersBeforeExclude,
+    afterExclude: finalUsers.length,
+  };
 };
 
 const ensureAuthenticatedUserDoc = async (firebaseUser: FirebaseUser): Promise<void> => {
-  if (!firebaseUser.email?.trim()) {
-    return;
-  }
-
   const firestore = requireDb();
-  const normalizedName = firebaseUser.displayName?.trim() || firebaseUser.email.trim();
+  const normalizedEmail = firebaseUser.email?.trim() ?? '';
+  const normalizedName = firebaseUser.displayName?.trim() || normalizedEmail || 'Usuario';
 
   try {
     await setDoc(
       doc(firestore, 'users', firebaseUser.uid),
       {
         uid: firebaseUser.uid,
-        email: firebaseUser.email.trim(),
+        email: normalizedEmail,
         name: normalizedName,
         updatedAt: serverTimestamp(),
         createdAt: serverTimestamp(),
@@ -146,7 +223,7 @@ const getUserByUidField = async (uid: string): Promise<UserProfile | null> => {
     throw mapFirestoreError(error);
   }
 
-  const [profile] = mapUsersFromSnapshot(snapshot.docs);
+  const [profile] = mapUsersFromSnapshot(snapshot.docs).users;
   return profile ?? null;
 };
 
@@ -165,11 +242,11 @@ export const listenUsers = (
   return onSnapshot(
     usersQuery,
     (snapshot) => {
-      const filteredUsers = mapUsersFromSnapshot(snapshot.docs, currentUserUid);
+      const result = mapUsersFromSnapshot(snapshot.docs, currentUserUid);
       console.log(
-        `[userService] onSnapshot users OK. docs=${snapshot.size}, válidos=${filteredUsers.length}, excludeUid=${currentUserUid ?? 'none'}.`,
+        `[userService] onSnapshot users OK. docs_crudos=${result.rawDocs}, válidos_antes_excluir=${result.validBeforeExclude}, finales=${result.afterExclude}, excludeUid=${currentUserUid ?? 'none'}.`,
       );
-      callback(filteredUsers);
+      callback(result.users);
     },
     (error) => {
       const firestoreError = error as Partial<FirestoreError>;
@@ -207,9 +284,11 @@ export const getUsers = async (currentUserUid?: string): Promise<UserProfile[]> 
     }
   }
 
-  const users = mapUsersFromSnapshot(snapshot.docs, currentUserUid);
-  console.log(`[userService] getUsers devolvió ${users.length} usuarios válidos.`);
-  return users;
+  const result = mapUsersFromSnapshot(snapshot.docs, currentUserUid);
+  console.log(
+    `[userService] getUsers resumen. docs_crudos=${result.rawDocs}, válidos_antes_excluir=${result.validBeforeExclude}, finales=${result.afterExclude}, excludeUid=${currentUserUid ?? 'none'}.`,
+  );
+  return result.users;
 };
 
 export const getUserById = async (uid: string): Promise<UserProfile | null> => {
