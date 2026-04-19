@@ -1,6 +1,6 @@
 import { User as FirebaseUser } from 'firebase/auth';
 import { FirestoreError, Timestamp, collection, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
-import { auth, db } from '@/src/config/firebase';
+import { auth, db, firebaseConfig } from '@/src/config/firebase';
 import { mapFirebaseErrorToSpanish } from '@/src/config/firebaseErrors';
 
 export type UserProfile = {
@@ -106,6 +106,7 @@ const autoRepairUserDocument = async (
     console.log(
       `[userService] users/${documentId} autoreparado. razón=${reason} uid=${uid} email=${email || '(vacío)'} name=${name}.`,
     );
+    console.log(`[userService] Usuario persistido correctamente users/${documentId}`);
   } catch (error) {
     const firestoreError = error as Partial<FirestoreError>;
     console.error(
@@ -205,6 +206,7 @@ const ensureAuthenticatedUserDoc = async (firebaseUser: FirebaseUser): Promise<v
       { merge: true },
     );
     console.log(`[userService] users/${firebaseUser.uid} asegurado desde getUsers (autorreparación).`);
+    console.log(`[userService] Usuario persistido correctamente users/${firebaseUser.uid}`);
   } catch (error) {
     const firestoreError = error as Partial<FirestoreError>;
     console.error(
@@ -248,12 +250,15 @@ export const listenUsers = (
     (snapshot) => {
       const result = mapUsersFromSnapshot(snapshot.docs, currentUserUid);
       console.log(
-        `[userService] onSnapshot users OK. docs_crudos=${result.rawDocs}, válidos_antes_excluir=${result.validBeforeExclude}, finales=${result.afterExclude}, excludeUid=${currentUserUid ?? 'none'}, uids=[${result.knownUids.join(',') || 'none'}].`,
+        `[userService] onSnapshot users OK. projectId=${firebaseConfig.projectId || 'N/D'} appId=${firebaseConfig.appId || 'N/D'} authDomain=${firebaseConfig.authDomain || 'N/D'} docs_crudos=${result.rawDocs}, válidos_antes_excluir=${result.validBeforeExclude}, finales=${result.afterExclude}, excludeUid=${currentUserUid ?? 'none'}, uids=[${result.knownUids.join(',') || 'none'}].`,
       );
       if (currentUserUid && result.containsCurrentUser && result.afterExclude === 0) {
         console.warn(
           `[userService] Solo existe users/${currentUserUid} tras excluir el usuario actual. Posible falta de persistencia del segundo usuario en colección users.`,
         );
+      }
+      if (result.rawDocs === 1 && result.validBeforeExclude === 1) {
+        console.warn('[userService] WARN: posible inconsistencia de backend Firebase entre dispositivos');
       }
       callback(result.users);
     },
@@ -295,12 +300,15 @@ export const getUsers = async (currentUserUid?: string): Promise<UserProfile[]> 
 
   const result = mapUsersFromSnapshot(snapshot.docs, currentUserUid);
   console.log(
-    `[userService] getUsers resumen. docs_crudos=${result.rawDocs}, válidos_antes_excluir=${result.validBeforeExclude}, finales=${result.afterExclude}, excludeUid=${currentUserUid ?? 'none'}, uids=[${result.knownUids.join(',') || 'none'}].`,
+    `[userService] getUsers resumen. projectId=${firebaseConfig.projectId || 'N/D'} appId=${firebaseConfig.appId || 'N/D'} authDomain=${firebaseConfig.authDomain || 'N/D'} docs_crudos=${result.rawDocs}, válidos_antes_excluir=${result.validBeforeExclude}, finales=${result.afterExclude}, excludeUid=${currentUserUid ?? 'none'}, uids=[${result.knownUids.join(',') || 'none'}].`,
   );
   if (currentUserUid && result.containsCurrentUser && result.afterExclude === 0) {
     console.warn(
       `[userService] getUsers detectó solo users/${currentUserUid}. El segundo usuario no aparece persistido aún en users.`,
     );
+  }
+  if (result.rawDocs === 1 && result.validBeforeExclude === 1) {
+    console.warn('[userService] WARN: posible inconsistencia de backend Firebase entre dispositivos');
   }
   return result.users;
 };

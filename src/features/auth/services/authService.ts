@@ -218,15 +218,20 @@ export const ensureUserDocument = async (uid: string, payload: EnsureUserProfile
   }
 
   try {
-    await setDoc(userRef, {
-      uid: normalizedProfile.uid,
-      email: normalizedProfile.email,
-      name: normalizedProfile.name,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-      online: true,
-    });
+    await setDoc(
+      userRef,
+      {
+        uid: normalizedProfile.uid,
+        email: normalizedProfile.email,
+        name: normalizedProfile.name,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        online: true,
+      },
+      { merge: true },
+    );
     console.log(`[authService] Perfil users/${normalizedProfile.uid} creado/reparado en Firestore.`);
+    console.log(`[userService] Usuario persistido correctamente users/${normalizedProfile.uid}`);
   } catch (error) {
     const firestoreError = error as Partial<FirestoreError> & { message?: string };
     console.error(
