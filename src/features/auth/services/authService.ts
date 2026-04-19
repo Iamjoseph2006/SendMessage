@@ -103,9 +103,12 @@ const ensureUserDocument = async (
     return;
   }
 
+  const currentData = userSnapshot.data();
+  const currentName = typeof currentData?.name === 'string' ? currentData.name.trim() : '';
+
   await updateDoc(userRef, {
     email: payload.email,
-    name: payload.name || payload.email,
+    ...(currentName ? {} : { name: payload.name || payload.email }),
     online: true,
   }).catch(() => undefined);
 };
