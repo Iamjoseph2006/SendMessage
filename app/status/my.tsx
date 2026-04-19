@@ -1,11 +1,11 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Stack, useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/features/auth/hooks/useAuth';
 import { StatusItem, deleteStatus, getStatuses } from '@/src/features/status/services/statusService';
-import { getRelativeStatusTime } from '@/src/features/status/utils/statusFormat';
+import { getRelativeStatusTime, getStatusPreview } from '@/src/features/status/utils/statusFormat';
 import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
 
 export default function MyStatusScreen() {
@@ -92,7 +92,8 @@ export default function MyStatusScreen() {
                   <Ionicons name="trash-outline" size={18} color="#D93025" />
                 </Pressable>
               </View>
-              <Text style={[styles.statusContent, { color: palette.textPrimary }]}>{status.content}</Text>
+              <Text style={[styles.statusContent, { color: palette.textPrimary }]}>{getStatusPreview(status)}</Text>
+              {status.imageUri ? <Image source={{ uri: status.imageUri }} style={styles.thumbnail} /> : null}
             </Pressable>
           ))
         )}
@@ -125,5 +126,6 @@ const styles = StyleSheet.create({
   statusHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   statusTime: { fontSize: 12, fontWeight: '600' },
   statusContent: { fontSize: 15, lineHeight: 20 },
+  thumbnail: { width: '100%', height: 120, borderRadius: 10 },
   error: { color: '#D93025' },
 });

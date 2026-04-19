@@ -52,3 +52,29 @@ export const getUserInitial = (value?: string | null): string => {
 
   return normalized[0]?.toUpperCase() ?? '?';
 };
+
+export const getStatusPreview = (status: StatusItem): string => {
+  const parts: string[] = [];
+
+  if (status.content?.trim()) {
+    parts.push(status.content.trim());
+  }
+
+  if (status.imageUri) {
+    parts.push('📷 Foto');
+  }
+
+  if (status.audioUri) {
+    parts.push('🎤 Audio');
+  }
+
+  if (status.location) {
+    parts.push('📍 Ubicación');
+  }
+
+  if (status.emojis?.length) {
+    parts.push(status.emojis.join(' '));
+  }
+
+  return parts.join(' · ') || 'Actualización';
+};

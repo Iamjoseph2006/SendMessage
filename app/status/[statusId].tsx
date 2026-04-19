@@ -1,11 +1,11 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/features/auth/hooks/useAuth';
 import { StatusItem, getStatuses } from '@/src/features/status/services/statusService';
-import { getRelativeStatusTime } from '@/src/features/status/utils/statusFormat';
+import { getRelativeStatusTime, getStatusPreview } from '@/src/features/status/utils/statusFormat';
 import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
 
 export default function StatusDetailScreen() {
@@ -54,7 +54,10 @@ export default function StatusDetailScreen() {
         {status ? (
           <>
             <Text style={[styles.time, { color: palette.textSecondary }]}>{getRelativeStatusTime(status)}</Text>
-            <Text style={[styles.content, { color: palette.textPrimary }]}>{status.content}</Text>
+            <Text style={[styles.content, { color: palette.textPrimary }]}>{getStatusPreview(status)}</Text>
+            {status.imageUri ? <Image source={{ uri: status.imageUri }} style={styles.previewImage} /> : null}
+            {status.location ? <Text style={[styles.meta, { color: palette.textSecondary }]}>📍 {status.location.label ?? `${status.location.latitude.toFixed(4)}, ${status.location.longitude.toFixed(4)}`}</Text> : null}
+            {status.audioUri ? <Text style={[styles.meta, { color: palette.textSecondary }]}>🎤 Audio adjunto</Text> : null}
           </>
         ) : (
           <Text style={[styles.notFound, { color: palette.textSecondary }]}>No encontramos este estado o ya expiró.</Text>
@@ -71,6 +74,8 @@ const styles = StyleSheet.create({
   card: { borderWidth: 1, borderRadius: 16, padding: 16, minHeight: 220, justifyContent: 'center', gap: 8 },
   time: { fontSize: 13, fontWeight: '600' },
   content: { fontSize: 22, fontWeight: '700', lineHeight: 30 },
+  previewImage: { width: '100%', height: 180, borderRadius: 12 },
+  meta: { fontSize: 14 },
   notFound: { textAlign: 'center', fontSize: 15 },
   error: { color: '#D93025', marginTop: 12 },
 });

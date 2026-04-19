@@ -6,7 +6,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/features/auth/hooks/useAuth';
 import { StatusItem, getStatuses } from '@/src/features/status/services/statusService';
-import { buildMyStatusSubtitle, getRelativeStatusTime, getUserInitial } from '@/src/features/status/utils/statusFormat';
+import { buildMyStatusSubtitle, getRelativeStatusTime, getStatusPreview, getUserInitial } from '@/src/features/status/utils/statusFormat';
 import { getUsersByUids } from '@/src/features/users/services/userService';
 import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
 
@@ -24,7 +24,7 @@ export default function StatusScreen() {
   const [error, setError] = useState<string | null>(null);
   const insets = useSafeAreaInsets();
 
-  const loadStatuses = async () => {
+  const loadStatuses = useCallback(async () => {
     try {
       setError(null);
       const nextStatuses = await getStatuses();
@@ -39,12 +39,12 @@ export default function StatusScreen() {
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'No se pudieron cargar los estados.');
     }
-  };
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
       loadStatuses();
-    }, []),
+    }, [loadStatuses]),
   );
 
   const { myStatuses, contactStatuses } = useMemo(() => {
@@ -113,7 +113,7 @@ export default function StatusScreen() {
               <View style={styles.statusTextWrap}>
                 <Text style={[styles.title, { color: palette.textPrimary }]}>{status.ownerName}</Text>
                 <Text style={[styles.subtitle, { color: palette.textSecondary }]}>
-                  {status.content} · {getRelativeStatusTime(status)}
+                  {getStatusPreview(status)} · {getRelativeStatusTime(status)}
                 </Text>
               </View>
             </View>
