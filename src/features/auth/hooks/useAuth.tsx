@@ -1,11 +1,13 @@
 import { onAuthStateChanged } from 'firebase/auth';
 import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
+import { AppState, AppStateStatus } from 'react-native';
 import { auth } from '@/src/config/firebase';
 import {
   AppUser,
   loginUser,
   logoutUser,
   registerUser,
+  setUserPresence,
   syncAuthenticatedUserProfile,
 } from '@/src/features/auth/services/authService';
 
@@ -84,6 +86,37 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     return unsubscribe;
   }, []);
+
+  useEffect(() => {
+    if (!user?.uid) {
+      return;
+    }
+
+    let currentState = AppState.currentState;
+
+    const applyPresence = (nextState: AppStateStatus) => {
+      const isActive = nextState === 'active';
+      void setUserPresence(user.uid, isActive).catch((error) => {
+        console.warn('[useAuth] No se pudo actualizar presencia.', error);
+      });
+    };
+
+    applyPresence(currentState);
+
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (currentState === nextState) {
+        return;
+      }
+
+      currentState = nextState;
+      applyPresence(nextState);
+    });
+
+    return () => {
+      subscription.remove();
+      void setUserPresence(user.uid, false).catch(() => undefined);
+    };
+  }, [user?.uid]);
 
   const handleAction = async (action: () => Promise<unknown>) => {
     setError(null);

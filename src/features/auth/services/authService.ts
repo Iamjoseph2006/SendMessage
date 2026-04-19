@@ -253,6 +253,7 @@ export const ensureUserDocument = async (uid: string, payload: EnsureUserProfile
         createdAt: existingCreatedAt ?? serverTimestamp(),
         updatedAt: serverTimestamp(),
         online: true,
+        lastSeen: null,
       },
       { merge: true },
     );
@@ -388,6 +389,18 @@ export const logoutUser = async (): Promise<void> => {
   const authClient = getAuthClient();
   const uid = authClient.currentUser?.uid;
 
+  if (uid && db) {
+    try {
+      await updateDoc(doc(db, 'users', uid), {
+        online: false,
+        lastSeen: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    } catch (error) {
+      console.warn('No se pudo marcar al usuario como desconectado antes del cierre de sesión.', error);
+    }
+  }
+
   await signOut(authClient);
 
   if (!uid) {
@@ -400,10 +413,28 @@ export const logoutUser = async (): Promise<void> => {
 
   void updateDoc(doc(db, 'users', uid), {
     online: false,
+    lastSeen: serverTimestamp(),
     updatedAt: serverTimestamp(),
   }).catch((error: unknown) => {
     console.warn('No se pudo marcar al usuario como desconectado en Firestore.', error);
   });
+};
+
+export const setUserPresence = async (uid: string, online: boolean): Promise<void> => {
+  if (!uid || !db) {
+    return;
+  }
+
+  await setDoc(
+    doc(db, 'users', uid),
+    {
+      uid,
+      online,
+      lastSeen: online ? null : serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true },
+  );
 };
 
 export const repairAuthenticatedUserProfile = async (firebaseUser: User | null): Promise<void> => {
