@@ -1,5 +1,6 @@
+import { User as FirebaseUser } from 'firebase/auth';
 import { FirestoreError, Timestamp, collection, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
-import { db } from '@/src/config/firebase';
+import { auth, db } from '@/src/config/firebase';
 import { mapFirebaseErrorToSpanish } from '@/src/config/firebaseErrors';
 
 export type UserProfile = {
@@ -101,6 +102,38 @@ const mapUsersFromSnapshot = (docs: { id: string; data: () => Record<string, unk
     .sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email));
 };
 
+const ensureAuthenticatedUserDoc = async (firebaseUser: FirebaseUser): Promise<void> => {
+  if (!firebaseUser.email?.trim()) {
+    return;
+  }
+
+  const firestore = requireDb();
+  const normalizedName = firebaseUser.displayName?.trim() || firebaseUser.email.trim();
+
+  try {
+    await setDoc(
+      doc(firestore, 'users', firebaseUser.uid),
+      {
+        uid: firebaseUser.uid,
+        email: firebaseUser.email.trim(),
+        name: normalizedName,
+        updatedAt: serverTimestamp(),
+        createdAt: serverTimestamp(),
+        online: true,
+      },
+      { merge: true },
+    );
+    console.log(`[userService] users/${firebaseUser.uid} asegurado desde getUsers (autorreparación).`);
+  } catch (error) {
+    const firestoreError = error as Partial<FirestoreError>;
+    console.error(
+      `[userService] Falló autorreparación users/${firebaseUser.uid}. code=${firestoreError?.code ?? 'unknown'} message=${firestoreError?.message ?? 'N/D'}`,
+      error,
+    );
+    throw error;
+  }
+};
+
 const getUserByUidField = async (uid: string): Promise<UserProfile | null> => {
   const firestore = requireDb();
   const usersQuery = query(collection(firestore, 'users'), where('uid', '==', uid));
@@ -161,6 +194,17 @@ export const getUsers = async (currentUserUid?: string): Promise<UserProfile[]> 
       `[userService] getDocs users FALLÓ. code=${firestoreError?.code ?? 'unknown'} message=${firestoreError?.message ?? 'N/D'}`,
     );
     throw mapFirestoreError(error);
+  }
+
+  if (snapshot.empty && currentUserUid && auth?.currentUser?.uid === currentUserUid) {
+    console.warn(`[userService] Colección users vacía para ${currentUserUid}. Intentando autorreparar perfil autenticado.`);
+    try {
+      await ensureAuthenticatedUserDoc(auth.currentUser);
+      snapshot = await getDocs(collection(firestore, 'users'));
+      console.log(`[userService] getDocs users tras autorreparación. docs=${snapshot.size}.`);
+    } catch (repairError) {
+      throw mapFirestoreError(repairError);
+    }
   }
 
   const users = mapUsersFromSnapshot(snapshot.docs, currentUserUid);

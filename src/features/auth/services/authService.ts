@@ -22,6 +22,8 @@ type NormalizedUserProfile = {
 };
 
 const FIRESTORE_PROFILE_WRITE_TIMEOUT_MS = 12000;
+const PROFILE_SYNC_MAX_RETRIES = 3;
+const PROFILE_SYNC_RETRY_DELAY_MS = 1200;
 
 const toTrimmedString = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
 
@@ -123,24 +125,52 @@ const isNonBlockingProfileSyncError = (error: unknown): boolean => {
   );
 };
 
+const getFirebaseLikeErrorCode = (error: unknown): string => {
+  const firebaseError = error as Partial<AuthError & FirestoreError> & { code?: string };
+  return firebaseError?.code ?? 'unknown';
+};
+
+const wait = (ms: number) => new Promise<void>((resolve) => {
+  setTimeout(resolve, ms);
+});
+
 const syncUserProfileSafely = async (firebaseUser: User): Promise<void> => {
   if (!firebaseUser.email) {
     return;
   }
 
-  try {
-    const profilePayload = normalizeProfilePayload(firebaseUser.uid, {
-      email: firebaseUser.email,
-      name: firebaseUser.displayName ?? '',
-    });
-    await ensureUserDocument(firebaseUser.uid, profilePayload);
-  } catch (error) {
-    if (isNonBlockingProfileSyncError(error)) {
-      console.warn('No se pudo sincronizar perfil en Firestore durante login, se continuará con sesión autenticada.', error);
-      return;
-    }
+  const profilePayload = normalizeProfilePayload(firebaseUser.uid, {
+    email: firebaseUser.email,
+    name: firebaseUser.displayName ?? '',
+  });
 
-    throw error;
+  for (let attempt = 1; attempt <= PROFILE_SYNC_MAX_RETRIES; attempt += 1) {
+    try {
+      console.log(`[authService] Intentando sincronizar users/${firebaseUser.uid} (intento ${attempt}/${PROFILE_SYNC_MAX_RETRIES}).`);
+      await ensureUserDocument(firebaseUser.uid, profilePayload);
+      return;
+    } catch (error) {
+      const errorCode = getFirebaseLikeErrorCode(error);
+      const canRetry = isNonBlockingProfileSyncError(error) && attempt < PROFILE_SYNC_MAX_RETRIES;
+
+      console.warn(
+        `[authService] Sync users/${firebaseUser.uid} falló (code=${errorCode}) en intento ${attempt}/${PROFILE_SYNC_MAX_RETRIES}.`,
+        error,
+      );
+
+      if (!canRetry) {
+        if (isNonBlockingProfileSyncError(error)) {
+          console.warn(
+            `[authService] No se pudo sincronizar users/${firebaseUser.uid} tras ${PROFILE_SYNC_MAX_RETRIES} intentos. Se mantiene sesión autenticada.`,
+          );
+          return;
+        }
+
+        throw error;
+      }
+
+      await wait(PROFILE_SYNC_RETRY_DELAY_MS * attempt);
+    }
   }
 };
 
