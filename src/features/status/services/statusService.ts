@@ -1,4 +1,4 @@
-import { Timestamp, addDoc, collection, getDocs, orderBy, query, serverTimestamp } from 'firebase/firestore';
+import { FirestoreError, Timestamp, addDoc, collection, getDocs, orderBy, query, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/src/config/firebase';
 
 export type StatusItem = {
@@ -16,6 +16,24 @@ const requireDb = () => {
   return db;
 };
 
+const mapFirestoreError = (error: unknown): Error => {
+  const firestoreError = error as Partial<FirestoreError>;
+
+  if (firestoreError?.code === 'permission-denied') {
+    return new Error('No tienes permisos para publicar o leer estados. Revisa firestore.rules.');
+  }
+
+  if (firestoreError?.code === 'failed-precondition') {
+    return new Error('Falta un índice para consultar estados.');
+  }
+
+  if (error instanceof Error) {
+    return error;
+  }
+
+  return new Error('No se pudo completar la operación de estados.');
+};
+
 export const createStatus = async (userId: string, content: string): Promise<string> => {
   const firestore = requireDb();
   const normalizedContent = content.trim();
@@ -24,28 +42,37 @@ export const createStatus = async (userId: string, content: string): Promise<str
     throw new Error('El estado no puede estar vacío.');
   }
 
-  const snapshot = await addDoc(collection(firestore, 'status'), {
-    userId,
-    content: normalizedContent,
-    createdAt: serverTimestamp(),
-  });
+  try {
+    const snapshot = await addDoc(collection(firestore, 'status'), {
+      userId,
+      content: normalizedContent,
+      createdAt: serverTimestamp(),
+    });
 
-  return snapshot.id;
+    return snapshot.id;
+  } catch (error) {
+    throw mapFirestoreError(error);
+  }
 };
 
 export const getStatuses = async (): Promise<StatusItem[]> => {
   const firestore = requireDb();
-  const statusesQuery = query(collection(firestore, 'status'), orderBy('createdAt', 'desc'));
-  const snapshot = await getDocs(statusesQuery);
 
-  return snapshot.docs.map((docSnapshot) => {
-    const data = docSnapshot.data();
+  try {
+    const statusesQuery = query(collection(firestore, 'status'), orderBy('createdAt', 'desc'));
+    const snapshot = await getDocs(statusesQuery);
 
-    return {
-      id: docSnapshot.id,
-      userId: data.userId as string,
-      content: data.content as string,
-      createdAt: (data.createdAt as Timestamp | undefined) ?? null,
-    } as StatusItem;
-  });
+    return snapshot.docs.map((docSnapshot) => {
+      const data = docSnapshot.data();
+
+      return {
+        id: docSnapshot.id,
+        userId: data.userId as string,
+        content: data.content as string,
+        createdAt: (data.createdAt as Timestamp | undefined) ?? null,
+      } as StatusItem;
+    });
+  } catch (error) {
+    throw mapFirestoreError(error);
+  }
 };

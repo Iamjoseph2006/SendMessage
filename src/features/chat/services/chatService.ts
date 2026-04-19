@@ -1,4 +1,5 @@
 import {
+  FirestoreError,
   Timestamp,
   addDoc,
   collection,
@@ -10,6 +11,7 @@ import {
   query,
   serverTimestamp,
   setDoc,
+  updateDoc,
   where,
 } from 'firebase/firestore';
 import { db } from '@/src/config/firebase';
@@ -18,6 +20,11 @@ export type Chat = {
   id: string;
   participants: string[];
   createdAt?: Timestamp | null;
+  updatedAt?: Timestamp | null;
+  lastMessage?: string;
+  lastMessageType?: ChatMessageType;
+  lastMessageSenderId?: string;
+  lastMessageAt?: Timestamp | null;
 };
 
 export type ChatMessageType = 'text' | 'image' | 'audio' | 'location';
@@ -39,85 +46,133 @@ const requireDb = () => {
   return db;
 };
 
-const buildChatId = (uid1: string, uid2: string) => [uid1, uid2].sort().join('_');
+const toDeterministicParticipants = (uid1: string, uid2: string): [string, string] => {
+  const first = uid1.trim();
+  const second = uid2.trim();
 
-export const createChat = async (userId1: string, userId2: string): Promise<string> => {
-  if (!userId1 || !userId2) {
+  if (!first || !second) {
     throw new Error('Se requieren ambos usuarios para crear un chat.');
   }
 
-  const firestore = requireDb();
-  const chatId = buildChatId(userId1, userId2);
-  const chatRef = doc(firestore, 'chats', chatId);
-  const existing = await getDoc(chatRef);
-
-  if (!existing.exists()) {
-    await setDoc(chatRef, {
-      id: chatId,
-      participants: [userId1, userId2],
-      createdAt: serverTimestamp(),
-    });
+  if (first === second) {
+    throw new Error('No puedes iniciar un chat contigo mismo.');
   }
 
-  return chatId;
+  return [first, second].sort() as [string, string];
+};
+
+const buildChatId = (uid1: string, uid2: string) => toDeterministicParticipants(uid1, uid2).join('_');
+
+const mapFirestoreError = (error: unknown): Error => {
+  const firestoreError = error as Partial<FirestoreError>;
+  if (firestoreError?.code === 'permission-denied') {
+    return new Error('No tienes permisos para leer/escribir este chat. Revisa firestore.rules y tu sesión.');
+  }
+
+  if (firestoreError?.code === 'failed-precondition') {
+    return new Error('Falta un índice de Firestore para esta consulta. Despliega firestore.indexes.json.');
+  }
+
+  if (firestoreError?.code === 'unavailable') {
+    return new Error('Firestore no está disponible temporalmente. Revisa conexión y vuelve a intentar.');
+  }
+
+  if (error instanceof Error) {
+    return error;
+  }
+
+  return new Error('Ocurrió un error inesperado con Firestore.');
+};
+
+const mapChat = (id: string, data: Record<string, unknown>): Chat => ({
+  id,
+  participants: (data.participants ?? []) as string[],
+  createdAt: (data.createdAt as Timestamp | undefined) ?? null,
+  updatedAt: (data.updatedAt as Timestamp | undefined) ?? null,
+  lastMessage: (data.lastMessage as string | undefined) ?? undefined,
+  lastMessageType: (data.lastMessageType as ChatMessageType | undefined) ?? undefined,
+  lastMessageSenderId: (data.lastMessageSenderId as string | undefined) ?? undefined,
+  lastMessageAt: (data.lastMessageAt as Timestamp | undefined) ?? null,
+});
+
+export const createChat = async (userId1: string, userId2: string): Promise<string> => {
+  const firestore = requireDb();
+
+  try {
+    const [firstUid, secondUid] = toDeterministicParticipants(userId1, userId2);
+    const chatId = buildChatId(firstUid, secondUid);
+    const chatRef = doc(firestore, 'chats', chatId);
+    const existing = await getDoc(chatRef);
+
+    if (!existing.exists()) {
+      await setDoc(chatRef, {
+        id: chatId,
+        participants: [firstUid, secondUid],
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        lastMessage: '',
+        lastMessageType: 'text',
+        lastMessageSenderId: '',
+        lastMessageAt: null,
+      });
+    }
+
+    return chatId;
+  } catch (error) {
+    throw mapFirestoreError(error);
+  }
 };
 
 export const createOrGetChat = createChat;
 
 export const getChatById = async (chatId: string): Promise<Chat | null> => {
   const firestore = requireDb();
-  const snapshot = await getDoc(doc(firestore, 'chats', chatId));
 
-  if (!snapshot.exists()) {
-    return null;
+  try {
+    const snapshot = await getDoc(doc(firestore, 'chats', chatId));
+
+    if (!snapshot.exists()) {
+      return null;
+    }
+
+    return mapChat(snapshot.id, snapshot.data());
+  } catch (error) {
+    throw mapFirestoreError(error);
   }
-
-  const data = snapshot.data();
-  return {
-    id: snapshot.id,
-    participants: (data.participants ?? []) as string[],
-    createdAt: (data.createdAt as Timestamp | undefined) ?? null,
-  };
 };
 
 export const getUserChats = async (uid: string): Promise<Chat[]> => {
   const firestore = requireDb();
-  const chatsQuery = query(collection(firestore, 'chats'), where('participants', 'array-contains', uid));
-  const snapshot = await getDocs(chatsQuery);
 
-  return snapshot.docs
-    .map((docSnapshot) => {
-      const data = docSnapshot.data();
-      return {
-        id: docSnapshot.id,
-        participants: (data.participants ?? []) as string[],
-        createdAt: (data.createdAt as Timestamp | undefined) ?? null,
-      } as Chat;
-    })
-    .sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
+  try {
+    const chatsQuery = query(
+      collection(firestore, 'chats'),
+      where('participants', 'array-contains', uid),
+      orderBy('updatedAt', 'desc'),
+    );
+    const snapshot = await getDocs(chatsQuery);
+
+    return snapshot.docs.map((docSnapshot) => mapChat(docSnapshot.id, docSnapshot.data()));
+  } catch (error) {
+    throw mapFirestoreError(error);
+  }
 };
 
 export const listenUserChats = (uid: string, callback: (chats: Chat[]) => void, onError?: (error: Error) => void) => {
   const firestore = requireDb();
-  const chatsQuery = query(collection(firestore, 'chats'), where('participants', 'array-contains', uid));
+  const chatsQuery = query(
+    collection(firestore, 'chats'),
+    where('participants', 'array-contains', uid),
+    orderBy('updatedAt', 'desc'),
+  );
 
   return onSnapshot(
     chatsQuery,
     (snapshot) => {
-      const chats = snapshot.docs
-        .map((docSnapshot) => {
-          const data = docSnapshot.data();
-          return {
-            id: docSnapshot.id,
-            participants: (data.participants ?? []) as string[],
-            createdAt: (data.createdAt as Timestamp | undefined) ?? null,
-          } as Chat;
-        })
-        .sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
-
+      const chats = snapshot.docs.map((docSnapshot) => mapChat(docSnapshot.id, docSnapshot.data()));
       callback(chats);
     },
-    (error) => onError?.(error as Error),
+    (error) => onError?.(mapFirestoreError(error)),
   );
 };
 
@@ -134,15 +189,67 @@ export const sendMessage = async (
     throw new Error('El mensaje no puede estar vacío.');
   }
 
-  const created = await addDoc(collection(firestore, 'messages'), {
-    chatId,
-    text: normalizedText,
-    senderId,
-    type,
-    createdAt: serverTimestamp(),
-  });
+  if (!senderId?.trim()) {
+    throw new Error('No se pudo identificar al remitente del mensaje.');
+  }
 
-  return created.id;
+  try {
+    const chatRef = doc(firestore, 'chats', chatId);
+    let chatSnapshot = await getDoc(chatRef);
+
+    if (!chatSnapshot.exists()) {
+      const participants = chatId.split('_').filter(Boolean);
+      if (participants.length !== 2 || !participants.includes(senderId)) {
+        throw new Error('El chat no existe y no se pudo inferir participantes válidos.');
+      }
+
+      const [firstUid, secondUid] = toDeterministicParticipants(participants[0], participants[1]);
+      const deterministicChatId = buildChatId(firstUid, secondUid);
+
+      if (deterministicChatId !== chatId) {
+        throw new Error('El identificador del chat no coincide con el formato esperado.');
+      }
+
+      await setDoc(chatRef, {
+        id: chatId,
+        participants: [firstUid, secondUid],
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        lastMessage: '',
+        lastMessageType: 'text',
+        lastMessageSenderId: '',
+        lastMessageAt: null,
+      });
+
+      chatSnapshot = await getDoc(chatRef);
+    }
+
+    const chat = mapChat(chatSnapshot.id, chatSnapshot.data() ?? {});
+
+    if (!chat.participants.includes(senderId)) {
+      throw new Error('No puedes enviar mensajes a un chat del que no eres participante.');
+    }
+
+    const created = await addDoc(collection(firestore, 'messages'), {
+      chatId,
+      text: normalizedText,
+      senderId,
+      type,
+      createdAt: serverTimestamp(),
+    });
+
+    await updateDoc(chatRef, {
+      lastMessage: normalizedText,
+      lastMessageType: type,
+      lastMessageSenderId: senderId,
+      lastMessageAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+
+    return created.id;
+  } catch (error) {
+    throw mapFirestoreError(error);
+  }
 };
 
 export const listenMessages = (
@@ -171,6 +278,6 @@ export const listenMessages = (
 
       callback(messages);
     },
-    (error) => onError?.(error as Error),
+    (error) => onError?.(mapFirestoreError(error)),
   );
 };
