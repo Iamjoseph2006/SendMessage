@@ -1,4 +1,4 @@
-import { Timestamp, collection, doc, getDoc, getDocs, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
+import { Timestamp, collection, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
 import { db } from '@/src/config/firebase';
 
 export type UserProfile = {
@@ -109,9 +109,11 @@ export const updateUserName = async (uid: string, name: string) => {
     throw new Error('El nombre no puede estar vacío.');
   }
 
-  await updateDoc(doc(firestore, 'users', uid), {
+  await setDoc(doc(firestore, 'users', uid), {
+    uid,
     name: nextName,
-  });
+    updatedAt: serverTimestamp(),
+  }, { merge: true });
 };
 
 export const getUsersByUids = async (uids: string[]): Promise<UserProfile[]> => {

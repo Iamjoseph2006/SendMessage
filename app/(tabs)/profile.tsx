@@ -1,10 +1,10 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/features/auth/hooks/useAuth';
-import { listenProfile } from '@/src/features/profile/services/profileService';
+import { listenProfile, updateProfileName } from '@/src/features/profile/services/profileService';
 import { UserProfile } from '@/src/features/users/services/userService';
 import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
 
@@ -25,6 +25,9 @@ export default function ProfileScreen() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [nextName, setNextName] = useState('');
+  const [savingName, setSavingName] = useState(false);
 
   useEffect(() => {
     if (!user?.uid) {
@@ -51,6 +54,46 @@ export default function ProfileScreen() {
     return unsubscribe;
   }, [user?.uid]);
 
+  const openEditProfile = () => {
+    setError(null);
+    setNextName(profile?.name || user?.displayName || '');
+    setShowEditModal(true);
+  };
+
+  const saveProfileName = async () => {
+    if (!user?.uid) {
+      return;
+    }
+
+    const normalizedName = nextName.trim();
+    const currentName = (profile?.name || '').trim();
+
+    if (!normalizedName) {
+      setError('El nombre no puede estar vacío.');
+      return;
+    }
+
+    if (normalizedName === currentName) {
+      setShowEditModal(false);
+      return;
+    }
+
+    setSavingName(true);
+    setError(null);
+
+    try {
+      await Promise.race([
+        updateProfileName(user.uid, normalizedName),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('La actualización tardó demasiado. Intenta de nuevo.')), 10000)),
+      ]);
+      setShowEditModal(false);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'No fue posible guardar tu nombre.');
+    } finally {
+      setSavingName(false);
+    }
+  };
+
   if (loading) {
     return (
       <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background }]}> 
@@ -73,6 +116,9 @@ export default function ProfileScreen() {
           </View>
           <Text style={[styles.name, { color: palette.textPrimary }]}>{profile?.name || profile?.email || 'Sin nombre'}</Text>
           <Text style={[styles.email, { color: palette.textSecondary }]}>{profile?.email ?? user?.email}</Text>
+          <Pressable style={styles.editButton} onPress={openEditProfile}>
+            <Text style={styles.editButtonText}>Editar perfil</Text>
+          </Pressable>
           {error ? <Text style={styles.error}>{error}</Text> : null}
         </View>
 
@@ -91,6 +137,39 @@ export default function ProfileScreen() {
           <Text style={styles.logoutText}>Cerrar sesión</Text>
         </Pressable>
       </View>
+
+      <Modal visible={showEditModal} transparent animationType="fade" onRequestClose={() => setShowEditModal(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setShowEditModal(false)}>
+          <Pressable style={[styles.modalCard, { backgroundColor: palette.surface }]} onPress={() => undefined}>
+            <Text style={[styles.modalTitle, { color: palette.textPrimary }]}>Editar perfil</Text>
+            <TextInput
+              value={nextName}
+              onChangeText={setNextName}
+              editable={!savingName}
+              autoCapitalize="words"
+              placeholder="Tu nombre"
+              placeholderTextColor={palette.textSecondary}
+              style={[
+                styles.input,
+                {
+                  color: palette.textPrimary,
+                  borderColor: palette.border,
+                  backgroundColor: isDark ? '#121A28' : '#F8FBFF',
+                },
+              ]}
+            />
+
+            <View style={styles.modalActions}>
+              <Pressable style={styles.cancelButton} disabled={savingName} onPress={() => setShowEditModal(false)}>
+                <Text style={styles.cancelButtonText}>Cancelar</Text>
+              </Pressable>
+              <Pressable style={styles.saveButton} disabled={savingName} onPress={saveProfileName}>
+                {savingName ? <ActivityIndicator color="#FFF" size="small" /> : <Text style={styles.saveButtonText}>Guardar</Text>}
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -120,6 +199,14 @@ const styles = StyleSheet.create({
   profileInitial: { fontSize: 28, fontWeight: '800', color: '#214060' },
   name: { fontSize: 20, fontWeight: '700' },
   email: { fontSize: 14 },
+  editButton: {
+    marginTop: 6,
+    backgroundColor: '#E8F1FF',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+  },
+  editButtonText: { color: '#1F57A4', fontWeight: '700' },
   optionRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -140,4 +227,45 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logoutText: { color: '#C62828', fontWeight: '700' },
+  modalBackdrop: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  modalCard: {
+    width: '88%',
+    borderRadius: 16,
+    padding: 16,
+    gap: 12,
+  },
+  modalTitle: { fontSize: 18, fontWeight: '700' },
+  input: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+  },
+  cancelButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: '#F1F4F9',
+  },
+  cancelButtonText: { color: '#42526B', fontWeight: '700' },
+  saveButton: {
+    minWidth: 90,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: '#1F7AE0',
+    alignItems: 'center',
+  },
+  saveButtonText: { color: '#FFF', fontWeight: '700' },
 });
