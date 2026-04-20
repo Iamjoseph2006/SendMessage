@@ -1,4 +1,4 @@
-import { QuerySnapshot, addDoc, collection, getDocs, onSnapshot, query, serverTimestamp, where } from 'firebase/firestore';
+import { QuerySnapshot, addDoc, collection, deleteDoc, doc, getDocs, onSnapshot, query, serverTimestamp, where } from 'firebase/firestore';
 import { db } from '@/src/config/firebase';
 import { mapFirebaseErrorToSpanish } from '@/src/config/firebaseErrors';
 import { DateInput, toSafeMillis } from '@/src/shared/utils/date';
@@ -80,6 +80,14 @@ export const createCall = async (
   });
 
   return snapshot.id;
+};
+
+export const deleteCall = async (callId: string): Promise<void> => {
+  try {
+    await deleteDoc(doc(requireDb(), 'calls', callId));
+  } catch (error) {
+    throw mapFirebaseErrorToSpanish(error, 'No se pudo eliminar la llamada.');
+  }
 };
 
 export const getCallHistory = async (userId: string): Promise<CallLog[]> => {

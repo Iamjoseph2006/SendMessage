@@ -106,7 +106,6 @@ export default function ConversationScreen() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editDraft, setEditDraft] = useState('');
   const [chatReadMap, setChatReadMap] = useState<Record<string, ChatMessage['createdAt']>>({});
-  const [composerHeight, setComposerHeight] = useState(44);
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
 
   const visibleMessages = useMemo(
@@ -482,22 +481,14 @@ export default function ConversationScreen() {
                 borderColor: palette.border,
                 color: palette.textPrimary,
                 backgroundColor: isDark ? '#111822' : '#FFF',
-                minHeight: 44,
-                maxHeight: 120,
-                height: composerHeight,
               },
             ]}
             placeholder="Mensaje"
             placeholderTextColor="#8C9DB0"
             value={input}
             onChangeText={setInput}
-            multiline
-            textAlignVertical={composerHeight > 52 ? 'top' : 'center'}
-            scrollEnabled={composerHeight >= 116}
-            onContentSizeChange={(event) => {
-              const nextHeight = Math.min(120, Math.max(44, event.nativeEvent.contentSize.height + 14));
-              setComposerHeight(nextHeight);
-            }}
+            multiline={false}
+            textAlignVertical="center"
             onFocus={() => listRef.current?.scrollToEnd({ animated: true })}
           />
           <Pressable style={[styles.audioAction, isRecording ? styles.audioActionRecording : null]} onPress={onAudioPress}><Ionicons name={isRecording ? 'stop' : 'mic'} size={16} color="#FFF" /></Pressable>
@@ -509,17 +500,15 @@ export default function ConversationScreen() {
         <Pressable style={styles.sheetOverlay} onPress={() => setShowAttachSheet(false)}>
           <View style={[styles.sheetContainer, { backgroundColor: palette.surface }]}> 
             {[
-              { icon: 'images', label: 'Fotos', onPress: handlePickPhoto, color: '#1F7AE0' },
-              { icon: 'camera', label: 'Cámara', onPress: handleCamera, color: '#009688' },
-              { icon: 'location', label: 'Ubicación', onPress: handleLocation, color: '#F57C00' },
-              { icon: 'person', label: 'Contacto', onPress: handleShareContact, color: '#8E24AA' },
-              { icon: 'document-text', label: 'Documento', onPress: () => setShowAttachSheet(false), color: '#546E7A' },
-              { icon: 'stats-chart', label: 'Encuesta', onPress: () => setShowAttachSheet(false), color: '#2E7D32' },
-              { icon: 'calendar', label: 'Evento', onPress: () => setShowAttachSheet(false), color: '#C2185B' },
-              { icon: 'sparkles', label: 'Imágenes IA', onPress: () => setShowAttachSheet(false), color: '#5E35B1' },
+              { icon: 'images', label: 'Fotos', onPress: handlePickPhoto },
+              { icon: 'camera', label: 'Cámara', onPress: handleCamera },
+              { icon: 'location', label: 'Ubicación', onPress: handleLocation },
+              { icon: 'person', label: 'Contacto', onPress: handleShareContact },
             ].map((action) => (
               <Pressable key={action.label} style={styles.sheetItem} onPress={action.onPress}>
-                <View style={[styles.sheetIconCircle, { backgroundColor: action.color }]}><Ionicons name={action.icon as any} size={22} color="#FFF" /></View>
+                <View style={[styles.sheetIconCircle, { backgroundColor: palette.background, borderColor: palette.border }]}>
+                  <Ionicons name={action.icon as any} size={22} color={palette.textPrimary} />
+                </View>
                 <Text style={[styles.sheetLabel, { color: palette.textPrimary }]}>{action.label}</Text>
               </Pressable>
             ))}
@@ -664,7 +653,7 @@ const styles = StyleSheet.create({
   attachButton: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   audioAction: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#0A84FF', alignItems: 'center', justifyContent: 'center' },
   audioActionRecording: { backgroundColor: '#D93025' },
-  input: { flex: 1, borderWidth: 1, borderRadius: 20, paddingHorizontal: 14, paddingTop: 10, paddingBottom: 10, fontSize: 15, lineHeight: 20 },
+  input: { flex: 1, height: 44, borderWidth: 1, borderRadius: 20, paddingHorizontal: 14, fontSize: 15, lineHeight: 20 },
   sendButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#0A84FF', alignItems: 'center', justifyContent: 'center' },
   sendButtonDisabled: { opacity: 0.5 },
   empty: { textAlign: 'center', marginTop: 22 },
@@ -672,7 +661,7 @@ const styles = StyleSheet.create({
   sheetOverlay: { flex: 1, backgroundColor: '#00000088', justifyContent: 'flex-end' },
   sheetContainer: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 18, flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
   sheetItem: { width: '22%', alignItems: 'center', gap: 6 },
-  sheetIconCircle: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
+  sheetIconCircle: { width: 56, height: 56, borderRadius: 28, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   sheetLabel: { textAlign: 'center', fontSize: 12, fontWeight: '600' },
   contextOverlay: { flex: 1, backgroundColor: '#00000090', justifyContent: 'center', padding: 20 },
   contextCard: { borderRadius: 18, padding: 14, gap: 8 },
