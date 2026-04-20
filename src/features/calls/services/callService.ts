@@ -1,7 +1,7 @@
-import { FirestoreError, addDoc, collection, getDocs, onSnapshot, or, orderBy, query, serverTimestamp, where } from 'firebase/firestore';
+import { FirestoreError, QuerySnapshot, addDoc, collection, getDocs, onSnapshot, query, serverTimestamp, where } from 'firebase/firestore';
 import { db } from '@/src/config/firebase';
 import { mapFirebaseErrorToSpanish } from '@/src/config/firebaseErrors';
-import { DateInput } from '@/src/shared/utils/date';
+import { DateInput, toSafeMillis } from '@/src/shared/utils/date';
 
 export type CallType = 'voice' | 'video';
 export type CallStatus = 'missed' | 'completed' | 'rejected';
@@ -44,11 +44,27 @@ const mapCallLog = (docSnapshot: { id: string; data: () => Record<string, unknow
   };
 };
 
-const buildCallHistoryQuery = (userId: string) =>
-  query(
-    collection(requireDb(), 'calls'),
-    or(where('callerId', '==', userId), where('receiverId', '==', userId)),
-    orderBy('createdAt', 'desc'),
+const sortCallsByDateDesc = (calls: CallLog[]) => [...calls].sort((a, b) => toSafeMillis(b.createdAt) - toSafeMillis(a.createdAt));
+
+const dedupeCallLogs = (calls: CallLog[]) => {
+  const seen = new Set<string>();
+  return calls.filter((call) => {
+    if (seen.has(call.id)) {
+      return false;
+    }
+    seen.add(call.id);
+    return true;
+  });
+};
+
+const buildCallerHistoryQuery = (userId: string) => query(collection(requireDb(), 'calls'), where('callerId', '==', userId));
+const buildReceiverHistoryQuery = (userId: string) => query(collection(requireDb(), 'calls'), where('receiverId', '==', userId));
+
+const mapCallSnapshots = (snapshots: QuerySnapshot[]) =>
+  sortCallsByDateDesc(
+    dedupeCallLogs(
+      snapshots.flatMap((snapshot) => snapshot.docs.map(mapCallLog)),
+    ),
   );
 
 export const createCall = async (
@@ -72,8 +88,8 @@ export const createCall = async (
 
 export const getCallHistory = async (userId: string): Promise<CallLog[]> => {
   try {
-    const snapshot = await getDocs(buildCallHistoryQuery(userId));
-    return snapshot.docs.map(mapCallLog);
+    const [asCaller, asReceiver] = await Promise.all([getDocs(buildCallerHistoryQuery(userId)), getDocs(buildReceiverHistoryQuery(userId))]);
+    return mapCallSnapshots([asCaller, asReceiver]);
   } catch (error) {
     throw mapCallsError(error);
   }
@@ -83,9 +99,37 @@ export const listenCallHistory = (
   userId: string,
   callback: (calls: CallLog[]) => void,
   onError?: (error: Error) => void,
-) =>
-  onSnapshot(
-    buildCallHistoryQuery(userId),
-    (snapshot) => callback(snapshot.docs.map(mapCallLog)),
+) => {
+  let callerSnapshot: QuerySnapshot | null = null;
+  let receiverSnapshot: QuerySnapshot | null = null;
+
+  const pushMergedCalls = () => {
+    if (!callerSnapshot || !receiverSnapshot) {
+      return;
+    }
+
+    callback(mapCallSnapshots([callerSnapshot, receiverSnapshot]));
+  };
+
+  const unsubscribeCaller = onSnapshot(
+    buildCallerHistoryQuery(userId),
+    (snapshot) => {
+      callerSnapshot = snapshot;
+      pushMergedCalls();
+    },
     (error) => onError?.(mapCallsError(error)),
   );
+  const unsubscribeReceiver = onSnapshot(
+    buildReceiverHistoryQuery(userId),
+    (snapshot) => {
+      receiverSnapshot = snapshot;
+      pushMergedCalls();
+    },
+    (error) => onError?.(mapCallsError(error)),
+  );
+
+  return () => {
+    unsubscribeCaller();
+    unsubscribeReceiver();
+  };
+};
