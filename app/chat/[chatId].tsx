@@ -492,7 +492,7 @@ export default function ConversationScreen() {
             value={input}
             onChangeText={setInput}
             multiline
-            textAlignVertical="top"
+            textAlignVertical={composerHeight > 52 ? 'top' : 'center'}
             scrollEnabled={composerHeight >= 116}
             onContentSizeChange={(event) => {
               const nextHeight = Math.min(120, Math.max(44, event.nativeEvent.contentSize.height + 14));
