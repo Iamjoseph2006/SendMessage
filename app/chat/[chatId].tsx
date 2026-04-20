@@ -17,6 +17,7 @@ import {
   FlatList,
   Image,
   Keyboard,
+  KeyboardEvent,
   KeyboardAvoidingView,
   Linking,
   Modal,
@@ -99,6 +100,10 @@ export default function ConversationScreen() {
   const [contactProfile, setContactProfile] = useState<UserProfile | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [showAttachSheet, setShowAttachSheet] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [openAttachAfterKeyboardCloses, setOpenAttachAfterKeyboardCloses] = useState(false);
+  const [inputHeight, setInputHeight] = useState(44);
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<ChatMessage | null>(null);
   const [contacts, setContacts] = useState<UserProfile[]>([]);
@@ -120,9 +125,29 @@ export default function ConversationScreen() {
   }, [visibleMessages.length]);
 
   useEffect(() => {
-    const showSub = Keyboard.addListener('keyboardDidShow', () => listRef.current?.scrollToEnd({ animated: true }));
-    return () => showSub.remove();
-  }, []);
+    const handleKeyboardShow = (event: KeyboardEvent) => {
+      setKeyboardVisible(true);
+      setKeyboardHeight(event.endCoordinates?.height ?? 0);
+      setShowAttachSheet(false);
+      listRef.current?.scrollToEnd({ animated: true });
+    };
+
+    const handleKeyboardHide = () => {
+      setKeyboardVisible(false);
+      setKeyboardHeight(0);
+      if (openAttachAfterKeyboardCloses) {
+        setShowAttachSheet(true);
+        setOpenAttachAfterKeyboardCloses(false);
+      }
+    };
+
+    const showSub = Keyboard.addListener('keyboardDidShow', handleKeyboardShow);
+    const hideSub = Keyboard.addListener('keyboardDidHide', handleKeyboardHide);
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [openAttachAfterKeyboardCloses]);
 
   useEffect(() => {
     if (!chatId || !user?.uid) return;
@@ -188,7 +213,16 @@ export default function ConversationScreen() {
     recorder.stop().catch(() => undefined);
   }, [recorder]);
 
-  const openAttachPicker = () => setShowAttachSheet(true);
+  const openAttachPicker = () => {
+    if (keyboardVisible) {
+      setOpenAttachAfterKeyboardCloses(true);
+      Keyboard.dismiss();
+      return;
+    }
+
+    setOpenAttachAfterKeyboardCloses(false);
+    setShowAttachSheet((current) => !current);
+  };
 
   const getSenderName = (senderId?: string) => {
     if (!senderId) return 'Contacto';
@@ -199,41 +233,59 @@ export default function ConversationScreen() {
 
   const handlePickPhoto = async () => {
     setShowAttachSheet(false);
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert('Permiso requerido', 'Debes conceder permiso de galería para compartir imágenes.');
-      return;
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permiso requerido', 'Debes conceder permiso de galería para compartir imágenes.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.9,
+        allowsEditing: false,
+        selectionLimit: 1,
+      });
+
+      if (result.canceled) return;
+      const uri = result.assets?.[0]?.uri;
+      if (!uri) {
+        Alert.alert('Imagen', 'No se pudo leer la imagen seleccionada.');
+        return;
+      }
+      await sendImage(uri);
+    } catch (pickError) {
+      const message = pickError instanceof Error ? pickError.message : 'No se pudo seleccionar la imagen.';
+      Alert.alert('Error al adjuntar imagen', message);
     }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      quality: 0.9,
-      allowsEditing: false,
-      selectionLimit: 1,
-    });
-
-    if (result.canceled) return;
-    const uri = result.assets?.[0]?.uri;
-    if (uri) await sendImage(uri);
   };
 
   const handleCamera = async () => {
     setShowAttachSheet(false);
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert('Permiso requerido', 'Debes conceder permiso de cámara para tomar fotos.');
-      return;
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permiso requerido', 'Debes conceder permiso de cámara para tomar fotos.');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        quality: 0.9,
+        allowsEditing: false,
+      });
+
+      if (result.canceled) return;
+      const uri = result.assets?.[0]?.uri;
+      if (!uri) {
+        Alert.alert('Cámara', 'No se pudo obtener la foto capturada.');
+        return;
+      }
+      await sendImage(uri);
+    } catch (cameraError) {
+      const message = cameraError instanceof Error ? cameraError.message : 'No se pudo abrir la cámara.';
+      Alert.alert('Error al usar cámara', message);
     }
-
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ['images'],
-      quality: 0.9,
-      allowsEditing: false,
-    });
-
-    if (result.canceled) return;
-    const uri = result.assets?.[0]?.uri;
-    if (uri) await sendImage(uri);
   };
 
   const handleLocation = async () => {
@@ -378,10 +430,13 @@ export default function ConversationScreen() {
     return <Ionicons name="checkmark" size={12} color="#DDEBFF" />;
   };
 
+  const attachPanelHeight = Math.max(220, keyboardHeight || 0);
+
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background }]}>
+    <SafeAreaView edges={['top', 'left', 'right']} style={[styles.safeArea, { backgroundColor: palette.background }]}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        enabled={Platform.OS === 'ios'}
+        behavior="padding"
         keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 8 : 0}
         style={styles.safeArea}>
         <View style={[styles.header, { borderBottomColor: palette.border, backgroundColor: palette.surface }]}> 
@@ -420,7 +475,7 @@ export default function ConversationScreen() {
           ref={listRef}
           data={visibleMessages}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={[styles.listContent, { paddingBottom: 12 }]}
+          contentContainerStyle={[styles.listContent, { paddingBottom: showAttachSheet ? 6 : 12 }]}
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           keyboardShouldPersistTaps="handled"
           onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
@@ -477,6 +532,7 @@ export default function ConversationScreen() {
           <TextInput
             style={[
               styles.input,
+              { height: inputHeight },
               {
                 borderColor: palette.border,
                 color: palette.textPrimary,
@@ -487,18 +543,33 @@ export default function ConversationScreen() {
             placeholderTextColor="#8C9DB0"
             value={input}
             onChangeText={setInput}
-            multiline={false}
-            textAlignVertical="center"
-            onFocus={() => listRef.current?.scrollToEnd({ animated: true })}
+            multiline
+            blurOnSubmit={false}
+            textAlignVertical="top"
+            onContentSizeChange={(event) => {
+              const nextHeight = event.nativeEvent.contentSize.height;
+              setInputHeight(Math.min(120, Math.max(44, nextHeight)));
+            }}
+            onFocus={() => {
+              setShowAttachSheet(false);
+              setOpenAttachAfterKeyboardCloses(false);
+              listRef.current?.scrollToEnd({ animated: true });
+            }}
           />
           <Pressable style={[styles.audioAction, isRecording ? styles.audioActionRecording : null]} onPress={onAudioPress}><Ionicons name={isRecording ? 'stop' : 'mic'} size={16} color="#FFF" /></Pressable>
           <Pressable style={[styles.sendButton, !canSend && styles.sendButtonDisabled]} disabled={!canSend} onPress={sendText}><Ionicons name="send" size={16} color="#FFF" /></Pressable>
         </View>
-      </KeyboardAvoidingView>
-
-      <Modal transparent visible={showAttachSheet} animationType="slide" onRequestClose={() => setShowAttachSheet(false)}>
-        <Pressable style={styles.sheetOverlay} onPress={() => setShowAttachSheet(false)}>
-          <View style={[styles.sheetContainer, { backgroundColor: palette.surface }]}> 
+        {showAttachSheet ? (
+          <View
+            style={[
+              styles.inlineAttachPanel,
+              {
+                backgroundColor: palette.surface,
+                borderTopColor: palette.border,
+                height: attachPanelHeight,
+                paddingBottom: Platform.OS === 'ios' ? Math.max(10, insets.bottom) : 10,
+              },
+            ]}>
             {[
               { icon: 'images', label: 'Fotos', onPress: handlePickPhoto },
               { icon: 'camera', label: 'Cámara', onPress: handleCamera },
@@ -513,8 +584,8 @@ export default function ConversationScreen() {
               </Pressable>
             ))}
           </View>
-        </Pressable>
-      </Modal>
+        ) : null}
+      </KeyboardAvoidingView>
 
       <Modal transparent visible={showContextMenu} animationType="fade" onRequestClose={() => setShowContextMenu(false)}>
         <Pressable style={styles.contextOverlay} onPress={() => setShowContextMenu(false)}>
@@ -649,17 +720,16 @@ const styles = StyleSheet.create({
   replyingTextWrap: { flex: 1, gap: 2 },
   replyingAuthor: { fontSize: 12, fontWeight: '700' },
   replyingLabel: { flex: 1, fontSize: 12 },
-  composer: { borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: 10, paddingTop: 8, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  composer: { borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: 10, paddingTop: 8, flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
   attachButton: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   audioAction: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#0A84FF', alignItems: 'center', justifyContent: 'center' },
   audioActionRecording: { backgroundColor: '#D93025' },
-  input: { flex: 1, height: 44, borderWidth: 1, borderRadius: 20, paddingHorizontal: 14, fontSize: 15, lineHeight: 20 },
+  input: { flex: 1, minHeight: 44, maxHeight: 120, borderWidth: 1, borderRadius: 20, paddingHorizontal: 14, paddingTop: 11, paddingBottom: 10, fontSize: 15, lineHeight: 20 },
   sendButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#0A84FF', alignItems: 'center', justifyContent: 'center' },
   sendButtonDisabled: { opacity: 0.5 },
   empty: { textAlign: 'center', marginTop: 22 },
   error: { color: '#D93025', marginHorizontal: 12, marginTop: 8 },
-  sheetOverlay: { flex: 1, backgroundColor: '#00000088', justifyContent: 'flex-end' },
-  sheetContainer: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 18, flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
+  inlineAttachPanel: { borderTopWidth: StyleSheet.hairlineWidth, borderTopLeftRadius: 18, borderTopRightRadius: 18, paddingTop: 16, paddingHorizontal: 18, flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
   sheetItem: { width: '22%', alignItems: 'center', gap: 6 },
   sheetIconCircle: { width: 56, height: 56, borderRadius: 28, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   sheetLabel: { textAlign: 'center', fontSize: 12, fontWeight: '600' },
