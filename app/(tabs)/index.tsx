@@ -45,6 +45,7 @@ export default function ChatsScreen() {
         lastMessageAt: toSafeMillis(chat.lastMessageAt) || toSafeMillis(chat.updatedAt),
         lastMessageSenderId: chat.lastMessageSenderId || '',
         unreadCount: chat.unreadCountByUser?.[user.uid] ?? 0,
+        lastReadAt: toSafeMillis(chat.lastReadAtByUser?.[user.uid]),
         presenceLabel,
         subtitle: chat.lastMessage
           ? `${chat.lastMessageSenderId === user.uid ? 'Tú: ' : ''}${chat.lastMessage}`
@@ -52,6 +53,14 @@ export default function ChatsScreen() {
       };
     }).sort((a, b) => b.lastMessageAt - a.lastMessageAt);
   }, [chats, user?.uid, usersByUid]);
+
+  const formatListTime = (millis: number) => {
+    if (!millis) return '';
+    const date = new Date(millis);
+    const now = new Date();
+    const sameDay = date.toDateString() === now.toDateString();
+    return new Intl.DateTimeFormat('es-ES', sameDay ? { hour: '2-digit', minute: '2-digit' } : { day: '2-digit', month: '2-digit' }).format(date);
+  };
 
   const unreadSummary = useMemo(() => {
     const chatsWithUnread = rows.filter((row) => row.unreadCount > 0);
@@ -122,14 +131,13 @@ export default function ChatsScreen() {
                     <Text style={styles.unreadText}>{item.unreadCount > 99 ? '99+' : item.unreadCount}</Text>
                   </View>
                 ) : (
-                  <Text style={[styles.presence, { color: item.presenceLabel === 'En línea' ? '#14A44D' : palette.textSecondary }]}>
-                    {item.presenceLabel}
-                  </Text>
+                  <Text style={[styles.presence, { color: palette.textSecondary }]}>{formatListTime(item.lastMessageAt) || item.presenceLabel}</Text>
                 )}
               </View>
-              <Text numberOfLines={1} style={[styles.lastMessage, { color: palette.textSecondary }]}>
-                {item.subtitle}
-              </Text>
+              <View style={styles.lastMessageRow}>
+                <Text numberOfLines={1} style={[styles.lastMessage, { color: palette.textSecondary }]}>{item.subtitle}</Text>
+                {item.unreadCount > 0 ? <View style={styles.unreadDot} /> : null}
+              </View>
             </View>
           </Pressable>
         )}
@@ -196,6 +204,8 @@ const styles = StyleSheet.create({
   },
   unreadText: { color: '#FFF', fontWeight: '700', fontSize: 12 },
   lastMessage: { fontSize: 13 },
+  lastMessageRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#1F7AE0' },
   fab: {
     position: 'absolute',
     right: 22,

@@ -1,4 +1,4 @@
-import { FirestoreError, QuerySnapshot, addDoc, collection, getDocs, onSnapshot, query, serverTimestamp, where } from 'firebase/firestore';
+import { FirestoreError, QuerySnapshot, addDoc, collection, getDocs, onSnapshot, orderBy, query, serverTimestamp, where } from 'firebase/firestore';
 import { db } from '@/src/config/firebase';
 import { mapFirebaseErrorToSpanish } from '@/src/config/firebaseErrors';
 import { DateInput, toSafeMillis } from '@/src/shared/utils/date';
@@ -57,8 +57,10 @@ const dedupeCallLogs = (calls: CallLog[]) => {
   });
 };
 
-const buildCallerHistoryQuery = (userId: string) => query(collection(requireDb(), 'calls'), where('callerId', '==', userId));
-const buildReceiverHistoryQuery = (userId: string) => query(collection(requireDb(), 'calls'), where('receiverId', '==', userId));
+const buildCallerHistoryQuery = (userId: string) =>
+  query(collection(requireDb(), 'calls'), where('callerId', '==', userId), orderBy('createdAt', 'desc'));
+const buildReceiverHistoryQuery = (userId: string) =>
+  query(collection(requireDb(), 'calls'), where('receiverId', '==', userId), orderBy('createdAt', 'desc'));
 
 const mapCallSnapshots = (snapshots: QuerySnapshot[]) =>
   sortCallsByDateDesc(

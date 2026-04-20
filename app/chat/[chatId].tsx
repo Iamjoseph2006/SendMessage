@@ -52,9 +52,9 @@ function AudioBubble({ uri, isMe }: { uri: string; isMe: boolean }) {
 }
 
 const getMessagePreview = (message: Pick<ChatMessage, 'type' | 'text'>) => {
-  if (message.type === 'image') return '📷 Imagen';
-  if (message.type === 'audio') return '🎤 Audio';
-  if (message.type === 'location') return '📍 Ubicación';
+  if (message.type === 'image') return 'Imagen';
+  if (message.type === 'audio') return 'Audio';
+  if (message.type === 'location') return 'Ubicación';
   return message.text || 'Mensaje';
 };
 
@@ -373,8 +373,8 @@ export default function ConversationScreen() {
     if (status === 'read') {
       return <Ionicons name="checkmark-done" size={14} color="#7ED0FF" />;
     }
-    if (status === 'delivered') {
-      return <Ionicons name="checkmark-done" size={14} color="#DDEBFF" />;
+    if (status === 'delivered' || message.readAt) {
+      return <Ionicons name="checkmark-done" size={14} color="#CFE4FF" />;
     }
     return <Ionicons name="checkmark" size={12} color="#DDEBFF" />;
   };
@@ -397,7 +397,7 @@ export default function ConversationScreen() {
             onPress={handleVideoCall}
             style={[
               styles.cleanHeaderAction,
-              { backgroundColor: isDark ? '#253140' : '#EAF2FF' },
+              { backgroundColor: isDark ? '#253140' : '#EAF2FF', borderWidth: isDark ? 0 : 1, borderColor: isDark ? 'transparent' : '#D6E4FF' },
             ]}>
             <Ionicons name="videocam-outline" size={20} color={isDark ? '#BFD9FF' : '#1B67C9'} />
           </Pressable>
@@ -405,7 +405,7 @@ export default function ConversationScreen() {
             onPress={handleVoiceCall}
             style={[
               styles.cleanHeaderAction,
-              { backgroundColor: isDark ? '#253140' : '#EAF2FF' },
+              { backgroundColor: isDark ? '#253140' : '#EAF2FF', borderWidth: isDark ? 0 : 1, borderColor: isDark ? 'transparent' : '#D6E4FF' },
             ]}>
             <Ionicons name="call-outline" size={18} color={isDark ? '#BFD9FF' : '#1B67C9'} />
           </Pressable>
@@ -435,8 +435,11 @@ export default function ConversationScreen() {
               <Pressable onLongPress={() => openContext(item)} style={[styles.bubble, isMe ? styles.me : styles.contact, { backgroundColor: bubbleBackground }]}> 
                 {item.replyTo ? (
                   <View style={[styles.replyWrap, { borderLeftColor: isMe ? '#D7E8FF' : '#5B8AC5' }]}>
-                    <Text style={[styles.replyText, { color: isMe ? '#EAF4FF' : isDark ? '#B9C5D9' : '#486B92' }]} numberOfLines={1}>
-                      ↪ {getSenderName(item.replyTo.senderId)}: {getMessagePreview(item.replyTo as ChatMessage)}
+                    <Text style={[styles.replyAuthor, { color: isMe ? '#EAF4FF' : isDark ? '#CFD8E8' : '#315A87' }]} numberOfLines={1}>
+                      {getSenderName(item.replyTo.senderId)}
+                    </Text>
+                    <Text style={[styles.replyText, { color: isMe ? '#DCEBFF' : isDark ? '#B9C5D9' : '#486B92' }]} numberOfLines={1}>
+                      {getMessagePreview(item.replyTo as ChatMessage)}
                     </Text>
                   </View>
                 ) : null}
@@ -462,9 +465,10 @@ export default function ConversationScreen() {
 
         {replyingTo ? (
           <View style={[styles.replyingBar, { borderColor: palette.border, backgroundColor: palette.surface }]}> 
-            <Text style={[styles.replyingLabel, { color: palette.textSecondary }]} numberOfLines={1}>
-              Respondiendo a {getSenderName(replyingTo.senderId)}: {getMessagePreview(replyingTo)}
-            </Text>
+            <View style={styles.replyingTextWrap}>
+              <Text style={[styles.replyingAuthor, { color: palette.textPrimary }]} numberOfLines={1}>{getSenderName(replyingTo.senderId)}</Text>
+              <Text style={[styles.replyingLabel, { color: palette.textSecondary }]} numberOfLines={1}>{getMessagePreview(replyingTo)}</Text>
+            </View>
             <Pressable onPress={() => setReplyingTo(null)}><Ionicons name="close" size={16} color={palette.textSecondary} /></Pressable>
           </View>
         ) : null}
@@ -478,6 +482,8 @@ export default function ConversationScreen() {
                 borderColor: palette.border,
                 color: palette.textPrimary,
                 backgroundColor: isDark ? '#111822' : '#FFF',
+                minHeight: 44,
+                maxHeight: 120,
                 height: composerHeight,
               },
             ]}
@@ -487,6 +493,7 @@ export default function ConversationScreen() {
             onChangeText={setInput}
             multiline
             textAlignVertical="top"
+            scrollEnabled={composerHeight >= 116}
             onContentSizeChange={(event) => {
               const nextHeight = Math.min(120, Math.max(44, event.nativeEvent.contentSize.height + 14));
               setComposerHeight(nextHeight);
@@ -634,6 +641,7 @@ const styles = StyleSheet.create({
   me: { alignSelf: 'flex-end', borderBottomRightRadius: 7 },
   contact: { alignSelf: 'flex-start', borderBottomLeftRadius: 7 },
   replyWrap: { borderLeftWidth: 2, paddingLeft: 6 },
+  replyAuthor: { fontSize: 12, fontWeight: '700' },
   replyText: { fontSize: 12 },
   forwardTag: { fontSize: 11, fontStyle: 'italic' },
   image: { width: 200, height: 200, borderRadius: 12 },
@@ -649,12 +657,14 @@ const styles = StyleSheet.create({
   reactionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 },
   reactionChip: { borderRadius: 999, paddingHorizontal: 6, paddingVertical: 2, fontSize: 11 },
   replyingBar: { borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: 10, paddingVertical: 8, flexDirection: 'row', gap: 8, alignItems: 'center' },
+  replyingTextWrap: { flex: 1, gap: 2 },
+  replyingAuthor: { fontSize: 12, fontWeight: '700' },
   replyingLabel: { flex: 1, fontSize: 12 },
   composer: { borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: 10, paddingTop: 8, flexDirection: 'row', alignItems: 'center', gap: 8 },
   attachButton: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   audioAction: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#0A84FF', alignItems: 'center', justifyContent: 'center' },
   audioActionRecording: { backgroundColor: '#D93025' },
-  input: { flex: 1, borderWidth: 1, borderRadius: 20, paddingHorizontal: 14, paddingTop: 10, paddingBottom: 10, fontSize: 15, maxHeight: 120 },
+  input: { flex: 1, borderWidth: 1, borderRadius: 20, paddingHorizontal: 14, paddingTop: 10, paddingBottom: 10, fontSize: 15, lineHeight: 20 },
   sendButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#0A84FF', alignItems: 'center', justifyContent: 'center' },
   sendButtonDisabled: { opacity: 0.5 },
   empty: { textAlign: 'center', marginTop: 22 },

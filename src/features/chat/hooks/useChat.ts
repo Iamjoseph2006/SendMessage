@@ -8,6 +8,7 @@ import {
   editMessage,
   listenMessages,
   markChatAsRead,
+  markChatAsDelivered,
   sendMessage,
   sendMessagePayload,
   reactToMessage,
@@ -86,6 +87,7 @@ export const useChat = (chatId: string | null, senderId: string | null): UseChat
       return;
     }
 
+    markChatAsDelivered(chatId, senderId).catch(() => undefined);
     markChatAsRead(chatId, senderId).catch(() => undefined);
   }, [chatId, messages, senderId]);
 
