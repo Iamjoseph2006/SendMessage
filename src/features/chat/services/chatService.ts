@@ -14,6 +14,7 @@ import {
   query,
   serverTimestamp,
   setDoc,
+  writeBatch,
   updateDoc,
   where,
 } from 'firebase/firestore';
@@ -253,6 +254,15 @@ export const getChatById = async (chatId: string): Promise<Chat | null> => {
   }
 };
 
+export const listenChatById = (chatId: string, callback: (chat: Chat | null) => void, onError?: (error: Error) => void) => {
+  const firestore = requireDb();
+  return onSnapshot(
+    doc(firestore, 'chats', chatId),
+    (snapshot) => callback(snapshot.exists() ? mapChat(snapshot.id, snapshot.data()) : null),
+    (error) => onError?.(mapFirestoreError(error)),
+  );
+};
+
 export const getUserChats = async (uid: string): Promise<Chat[]> => {
   try {
     const snapshot = await getDocs(buildUserChatsQuery(uid));
@@ -360,7 +370,7 @@ export const sendMessagePayload = async (chatId: string, input: SendMessageInput
       isStarredBy: [],
       deletedFor: [],
       reactions: {},
-      deliveredAt: serverTimestamp(),
+      deliveredAt: null,
       readAt: null,
       createdAt: serverTimestamp(),
     });
@@ -495,9 +505,37 @@ export const reactToMessage = async (
 
 export const markChatAsRead = async (chatId: string, userId: string): Promise<void> => {
   const firestore = requireDb();
-  await updateDoc(doc(firestore, 'chats', chatId), {
+  const chatSnapshot = await getDoc(doc(firestore, 'chats', chatId));
+  if (!chatSnapshot.exists()) {
+    return;
+  }
+
+  const messageSnapshot = await getDocs(query(collection(firestore, 'messages'), where('chatId', '==', chatId)));
+  const batch = writeBatch(firestore);
+  const hasUnreadIncoming = messageSnapshot.docs.some((messageDoc) => {
+    const data = messageDoc.data();
+    return data.senderId !== userId && data.readAt == null;
+  });
+
+  if (hasUnreadIncoming) {
+    messageSnapshot.docs.forEach((messageDoc) => {
+      const data = messageDoc.data();
+      if (data.senderId === userId || data.readAt != null) {
+        return;
+      }
+
+      batch.update(messageDoc.ref, {
+        deliveredAt: data.deliveredAt ?? serverTimestamp(),
+        readAt: serverTimestamp(),
+      });
+    });
+  }
+
+  batch.update(doc(firestore, 'chats', chatId), {
     [`unreadCountByUser.${userId}`]: 0,
     [`lastReadAtByUser.${userId}`]: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
+
+  await batch.commit();
 };

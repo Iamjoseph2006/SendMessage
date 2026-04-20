@@ -30,9 +30,10 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/features/auth/hooks/useAuth';
 import { useChat } from '@/src/features/chat/hooks/useChat';
-import { ChatLocation, ChatMessage, getChatById, markChatAsRead } from '@/src/features/chat/services/chatService';
+import { ChatLocation, ChatMessage, getChatById, listenChatById, markChatAsRead } from '@/src/features/chat/services/chatService';
 import { getUsers, UserProfile, getUsersByUids, listenUserById } from '@/src/features/users/services/userService';
 import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
+import { toSafeDate, toSafeMillis } from '@/src/shared/utils/date';
 
 const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
@@ -58,7 +59,7 @@ const getMessagePreview = (message: Pick<ChatMessage, 'type' | 'text'>) => {
 };
 
 const formatMessageTime = (timestamp?: ChatMessage['createdAt']) => {
-  const date = timestamp?.toDate?.();
+  const date = toSafeDate(timestamp);
   if (!date) return '';
   return new Intl.DateTimeFormat('es-ES', { hour: '2-digit', minute: '2-digit' }).format(date);
 };
@@ -104,6 +105,8 @@ export default function ConversationScreen() {
   const [usersMap, setUsersMap] = useState<Record<string, UserProfile>>({});
   const [showEditModal, setShowEditModal] = useState(false);
   const [editDraft, setEditDraft] = useState('');
+  const [chatReadMap, setChatReadMap] = useState<Record<string, ChatMessage['createdAt']>>({});
+  const [composerHeight, setComposerHeight] = useState(44);
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
 
   const visibleMessages = useMemo(
@@ -126,6 +129,16 @@ export default function ConversationScreen() {
     if (!chatId || !user?.uid) return;
     markChatAsRead(chatId, user.uid).catch(() => undefined);
   }, [chatId, user?.uid]);
+
+  useEffect(() => {
+    if (!chatId) return;
+    const unsubscribe = listenChatById(
+      chatId,
+      (chat) => setChatReadMap(chat?.lastReadAtByUser ?? {}),
+      () => setChatReadMap({}),
+    );
+    return unsubscribe;
+  }, [chatId]);
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -273,7 +286,7 @@ export default function ConversationScreen() {
   };
 
   const handleVoiceCall = () => {
-    const phone = contactProfile?.phone?.trim();
+    const phone = (contactProfile as UserProfile & { phone?: string } | null)?.phone?.trim();
     if (!phone) {
       Alert.alert('Llamada', `Llamar a ${chatName}`);
       return;
@@ -332,6 +345,40 @@ export default function ConversationScreen() {
     return `Última vez a las ${time}`;
   }, [contactProfile]);
 
+  const getOwnMessageStatus = (message: ChatMessage): 'sent' | 'delivered' | 'read' => {
+    if (!user?.uid || !chatId) {
+      return 'sent';
+    }
+
+    const recipientUid = chatId
+      .split('_')
+      .find((participantUid) => participantUid && participantUid !== user.uid);
+    const recipientLastReadAt = recipientUid ? chatReadMap[recipientUid] : null;
+    const sentAt = toSafeMillis(message.createdAt);
+    const readAtMillis = toSafeMillis(recipientLastReadAt);
+
+    if (readAtMillis >= sentAt && sentAt > 0) {
+      return 'read';
+    }
+
+    if (message.deliveredAt) {
+      return 'delivered';
+    }
+
+    return 'sent';
+  };
+
+  const renderMessageStatus = (message: ChatMessage) => {
+    const status = getOwnMessageStatus(message);
+    if (status === 'read') {
+      return <Ionicons name="checkmark-done" size={14} color="#7ED0FF" />;
+    }
+    if (status === 'delivered') {
+      return <Ionicons name="checkmark-done" size={14} color="#DDEBFF" />;
+    }
+    return <Ionicons name="checkmark" size={12} color="#DDEBFF" />;
+  };
+
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background }]}>
       <KeyboardAvoidingView
@@ -346,8 +393,22 @@ export default function ConversationScreen() {
             <Text style={[styles.headerName, { color: palette.textPrimary }]} numberOfLines={1}>{chatName}</Text>
             <Text style={[styles.headerSubtitle, { color: contactProfile?.online ? '#14A44D' : palette.textSecondary }]} numberOfLines={1}>{availabilityLabel}</Text>
           </Pressable>
-          <Pressable onPress={handleVideoCall} style={styles.cleanHeaderAction}><Ionicons name="videocam-outline" size={22} color={palette.textPrimary} /></Pressable>
-          <Pressable onPress={handleVoiceCall} style={styles.cleanHeaderAction}><Ionicons name="call-outline" size={20} color={palette.textPrimary} /></Pressable>
+          <Pressable
+            onPress={handleVideoCall}
+            style={[
+              styles.cleanHeaderAction,
+              { backgroundColor: isDark ? '#253140' : '#EAF2FF' },
+            ]}>
+            <Ionicons name="videocam-outline" size={20} color={isDark ? '#BFD9FF' : '#1B67C9'} />
+          </Pressable>
+          <Pressable
+            onPress={handleVoiceCall}
+            style={[
+              styles.cleanHeaderAction,
+              { backgroundColor: isDark ? '#253140' : '#EAF2FF' },
+            ]}>
+            <Ionicons name="call-outline" size={18} color={isDark ? '#BFD9FF' : '#1B67C9'} />
+          </Pressable>
           <Pressable onPress={() => router.push(`/chat/info/${chatId}`)} style={styles.cleanHeaderAction}>
             <Ionicons name="information-circle-outline" size={21} color={palette.textSecondary} />
           </Pressable>
@@ -360,7 +421,7 @@ export default function ConversationScreen() {
           ref={listRef}
           data={visibleMessages}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={[styles.listContent, { paddingBottom: 90 }]}
+          contentContainerStyle={[styles.listContent, { paddingBottom: 12 }]}
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           keyboardShouldPersistTaps="handled"
           onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
@@ -389,21 +450,15 @@ export default function ConversationScreen() {
                 ) : null}
                 {item.text ? <Text style={[styles.messageText, { color: bubbleTextColor }]}>{item.text}</Text> : null}
                 {renderReactions(item)}
-                <Text style={[styles.messageTime, { color: isMe ? '#DDEBFF' : isDark ? '#AEB8C9' : '#6A7587' }]}>{formatMessageTime(item.createdAt)}</Text>
+                <View style={styles.messageMeta}>
+                  <Text style={[styles.messageTime, { color: isMe ? '#DDEBFF' : isDark ? '#AEB8C9' : '#6A7587' }]}>{formatMessageTime(item.createdAt)}</Text>
+                  {isMe ? renderMessageStatus(item) : null}
+                </View>
               </Pressable>
             );
           }}
           ListEmptyComponent={!loading ? <Text style={[styles.empty, { color: palette.textSecondary }]}>Aún no hay mensajes en esta conversación.</Text> : null}
         />
-
-        <View style={[styles.fabGroup, { bottom: Math.max(insets.bottom + 90, 100) }]}>
-          <Pressable style={[styles.fabButton, { backgroundColor: '#34C759' }]} onPress={handleVideoCall}>
-            <Ionicons name="videocam" size={22} color="#FFF" />
-          </Pressable>
-          <Pressable style={[styles.fabButton, { backgroundColor: '#0A84FF' }]} onPress={handleVoiceCall}>
-            <Ionicons name="call" size={20} color="#FFF" />
-          </Pressable>
-        </View>
 
         {replyingTo ? (
           <View style={[styles.replyingBar, { borderColor: palette.border, backgroundColor: palette.surface }]}> 
@@ -417,11 +472,25 @@ export default function ConversationScreen() {
         <View style={[styles.composer, { borderTopColor: palette.border, backgroundColor: palette.surface, paddingBottom: Platform.OS === 'ios' ? Math.max(6, insets.bottom) : 8 }]}>
           <Pressable style={styles.attachButton} onPress={openAttachPicker}><Ionicons name="add" size={20} color={palette.textPrimary} /></Pressable>
           <TextInput
-            style={[styles.input, { borderColor: palette.border, color: palette.textPrimary, backgroundColor: isDark ? '#111822' : '#FFF' }]}
+            style={[
+              styles.input,
+              {
+                borderColor: palette.border,
+                color: palette.textPrimary,
+                backgroundColor: isDark ? '#111822' : '#FFF',
+                height: composerHeight,
+              },
+            ]}
             placeholder="Mensaje"
             placeholderTextColor="#8C9DB0"
             value={input}
             onChangeText={setInput}
+            multiline
+            textAlignVertical="top"
+            onContentSizeChange={(event) => {
+              const nextHeight = Math.min(120, Math.max(44, event.nativeEvent.contentSize.height + 14));
+              setComposerHeight(nextHeight);
+            }}
             onFocus={() => listRef.current?.scrollToEnd({ animated: true })}
           />
           <Pressable style={[styles.audioAction, isRecording ? styles.audioActionRecording : null]} onPress={onAudioPress}><Ionicons name={isRecording ? 'stop' : 'mic'} size={16} color="#FFF" /></Pressable>
@@ -556,7 +625,7 @@ const styles = StyleSheet.create({
   header: { minHeight: 60, flexDirection: 'row', alignItems: 'center', gap: 4, borderBottomWidth: StyleSheet.hairlineWidth, paddingHorizontal: 10 },
   backButton: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   headerTextWrap: { flex: 1, gap: 1 },
-  cleanHeaderAction: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
+  cleanHeaderAction: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
   headerName: { fontSize: 18, fontWeight: '700' },
   headerSubtitle: { fontSize: 12, fontWeight: '600' },
   loading: { marginTop: 12 },
@@ -575,7 +644,8 @@ const styles = StyleSheet.create({
   locationText: { textDecorationLine: 'underline', fontWeight: '700' },
   messageText: { fontSize: 15, lineHeight: 20 },
   meText: { color: '#FFFFFF' },
-  messageTime: { fontSize: 11, alignSelf: 'flex-end', marginTop: 2 },
+  messageMeta: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-end', gap: 4, marginTop: 2 },
+  messageTime: { fontSize: 11 },
   reactionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 },
   reactionChip: { borderRadius: 999, paddingHorizontal: 6, paddingVertical: 2, fontSize: 11 },
   replyingBar: { borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: 10, paddingVertical: 8, flexDirection: 'row', gap: 8, alignItems: 'center' },
@@ -584,7 +654,7 @@ const styles = StyleSheet.create({
   attachButton: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   audioAction: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#0A84FF', alignItems: 'center', justifyContent: 'center' },
   audioActionRecording: { backgroundColor: '#D93025' },
-  input: { flex: 1, borderWidth: 1, borderRadius: 23, paddingHorizontal: 14, paddingVertical: 11, fontSize: 15 },
+  input: { flex: 1, borderWidth: 1, borderRadius: 20, paddingHorizontal: 14, paddingTop: 10, paddingBottom: 10, fontSize: 15, maxHeight: 120 },
   sendButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#0A84FF', alignItems: 'center', justifyContent: 'center' },
   sendButtonDisabled: { opacity: 0.5 },
   empty: { textAlign: 'center', marginTop: 22 },
@@ -600,19 +670,6 @@ const styles = StyleSheet.create({
   contextReactionEmoji: { fontSize: 28 },
   contextRow: { flexDirection: 'row', gap: 10, alignItems: 'center', paddingVertical: 8 },
   contextLabel: { fontSize: 14, fontWeight: '600' },
-  fabGroup: { position: 'absolute', right: 18, gap: 10, alignItems: 'center' },
-  fabButton: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 5,
-  },
   editCard: { borderRadius: 16, padding: 14, gap: 10 },
   editTitle: { fontSize: 16, fontWeight: '700' },
   editInput: { borderWidth: 1, borderRadius: 12, minHeight: 80, padding: 10, textAlignVertical: 'top' },

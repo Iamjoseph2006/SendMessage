@@ -53,6 +53,14 @@ export default function ChatsScreen() {
     }).sort((a, b) => b.lastMessageAt - a.lastMessageAt);
   }, [chats, user?.uid, usersByUid]);
 
+  const unreadSummary = useMemo(() => {
+    const chatsWithUnread = rows.filter((row) => row.unreadCount > 0);
+    return {
+      chatsWithUnread: chatsWithUnread.length,
+      totalUnread: chatsWithUnread.reduce((sum, row) => sum + row.unreadCount, 0),
+    };
+  }, [rows]);
+
   useEffect(() => {
     if (!user?.uid || rows.length === 0) {
       return;
@@ -127,7 +135,21 @@ export default function ChatsScreen() {
         )}
       />
 
-      {inAppNotice ? <Text style={styles.notice}>{inAppNotice}</Text> : null}
+      {unreadSummary.totalUnread > 0 ? (
+        <View style={[styles.unreadSummaryCard, { backgroundColor: isDark ? '#1C2A3D' : '#EAF2FF' }]}>
+          <Ionicons name="notifications-outline" size={17} color={isDark ? '#BFD9FF' : '#1F7AE0'} />
+          <Text style={[styles.unreadSummaryText, { color: isDark ? '#DCEAFF' : '#1A3E6E' }]}>
+            {unreadSummary.chatsWithUnread} chats · {unreadSummary.totalUnread} mensajes nuevos
+          </Text>
+        </View>
+      ) : null}
+
+      {inAppNotice ? (
+        <View style={styles.notice}>
+          <Ionicons name="chatbubble-ellipses" size={14} color="#FFF" />
+          <Text style={styles.noticeText}>{inAppNotice}</Text>
+        </View>
+      ) : null}
 
       <Pressable style={styles.fab} onPress={() => router.push('/chat/new')}>
         <Ionicons name="chatbubble-ellipses" size={22} color="#FFF" />
@@ -188,15 +210,32 @@ const styles = StyleSheet.create({
   },
   error: { color: '#D93025', marginHorizontal: 16, marginBottom: 8 },
   empty: { textAlign: 'center', marginTop: 24 },
-  notice: {
+  unreadSummaryCard: {
     position: 'absolute',
     bottom: 98,
     alignSelf: 'center',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  unreadSummaryText: { fontWeight: '600', fontSize: 12 },
+  notice: {
+    position: 'absolute',
+    bottom: 56,
+    alignSelf: 'center',
     backgroundColor: '#1F7AE0',
-    color: '#FFF',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 999,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  noticeText: {
+    color: '#FFF',
     fontWeight: '600',
   },
 });
