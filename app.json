@@ -12,6 +12,7 @@
       "supportsTablet": true
     },
     "android": {
+      "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -40,7 +41,20 @@
         }
       ],
       "expo-audio",
-      "expo-video"
+      "expo-video",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Permite acceder a tus fotos para adjuntar imágenes en el chat.",
+          "cameraPermission": "Permite usar la cámara para tomar fotos y enviarlas en el chat."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Permite acceder a tu ubicación para compartirla en el chat."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

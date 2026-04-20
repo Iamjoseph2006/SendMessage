@@ -19,7 +19,7 @@ import {
   where,
 } from 'firebase/firestore';
 import { FirebaseStorage, getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage';
-import { app, db } from '@/src/config/firebase';
+import { app, db, firebaseConfig } from '@/src/config/firebase';
 import { DateInput, toSafeMillis } from '@/src/shared/utils/date';
 import { mapFirebaseErrorToSpanish } from '@/src/config/firebaseErrors';
 
@@ -89,6 +89,10 @@ const requireDb = () => {
 const getStorageInstance = (): FirebaseStorage => {
   if (!app) {
     throw new Error('Firebase Storage no está disponible porque Firebase no está inicializado.');
+  }
+
+  if (!firebaseConfig.storageBucket?.trim()) {
+    throw new Error('Firebase Storage no está configurado. Falta EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET.');
   }
 
   return getStorage(app);
