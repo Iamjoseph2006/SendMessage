@@ -9,6 +9,7 @@ import { useUserChats } from '@/src/features/chat/hooks/useUserChats';
 import { useUsersDirectory } from '@/src/features/users/hooks/useUsersDirectory';
 import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
 import { getAvatarInitials } from '@/src/shared/utils/avatar';
+import { toSafeMillis } from '@/src/shared/utils/date';
 
 export default function ChatsScreen() {
   const { user } = useAuth();
@@ -41,7 +42,7 @@ export default function ChatsScreen() {
         contactUid,
         title: contact?.name || contact?.email || 'Sin nombre',
         photoURL: contact?.photoURL ?? null,
-        lastMessageAt: chat.lastMessageAt?.toMillis() ?? chat.updatedAt?.toMillis() ?? 0,
+        lastMessageAt: toSafeMillis(chat.lastMessageAt) || toSafeMillis(chat.updatedAt),
         lastMessageSenderId: chat.lastMessageSenderId || '',
         unreadCount: chat.unreadCountByUser?.[user.uid] ?? 0,
         presenceLabel,

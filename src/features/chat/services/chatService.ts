@@ -1,6 +1,5 @@
 import {
   FirestoreError,
-  Timestamp,
   addDoc,
   arrayRemove,
   arrayUnion,
@@ -20,21 +19,22 @@ import {
 } from 'firebase/firestore';
 import { FirebaseStorage, getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage';
 import { app, db } from '@/src/config/firebase';
+import { DateInput, toSafeMillis } from '@/src/shared/utils/date';
 import { mapFirebaseErrorToSpanish } from '@/src/config/firebaseErrors';
 
 export type Chat = {
   id: string;
   participants: string[];
-  createdAt?: Timestamp | null;
-  updatedAt?: Timestamp | null;
+  createdAt?: DateInput;
+  updatedAt?: DateInput;
   lastMessage?: string;
   lastMessageType?: ChatMessageType;
   lastMessageSenderId?: string;
-  lastMessageAt?: Timestamp | null;
+  lastMessageAt?: DateInput;
   pinnedMessageId?: string | null;
-  pinnedAt?: Timestamp | null;
+  pinnedAt?: DateInput;
   unreadCountByUser?: Record<string, number>;
-  lastReadAtByUser?: Record<string, Timestamp | null>;
+  lastReadAtByUser?: Record<string, DateInput>;
 };
 
 export type ChatMessageType = 'text' | 'image' | 'audio' | 'location';
@@ -51,19 +51,19 @@ export type ChatMessage = {
   text: string;
   senderId: string;
   type: ChatMessageType;
-  createdAt?: Timestamp | null;
+  createdAt?: DateInput;
   mediaUrl?: string | null;
   audioUrl?: string | null;
   location?: ChatLocation | null;
   replyTo?: Pick<ChatMessage, 'id' | 'senderId' | 'text' | 'type'> | null;
   forwardedFrom?: string | null;
-  editedAt?: Timestamp | null;
+  editedAt?: DateInput;
   isPinned?: boolean;
   isStarredBy?: string[];
   deletedFor?: string[];
   reactions?: Record<string, string[]>;
-  deliveredAt?: Timestamp | null;
-  readAt?: Timestamp | null;
+  deliveredAt?: DateInput;
+  readAt?: DateInput;
 };
 
 export type SendMessageInput = {
@@ -139,16 +139,16 @@ const buildMessagePreview = (input: SendMessageInput): string => {
 const mapChat = (id: string, data: Record<string, unknown>): Chat => ({
   id,
   participants: (data.participants ?? []) as string[],
-  createdAt: (data.createdAt as Timestamp | undefined) ?? null,
-  updatedAt: (data.updatedAt as Timestamp | undefined) ?? null,
+  createdAt: (data.createdAt as DateInput | undefined) ?? null,
+  updatedAt: (data.updatedAt as DateInput | undefined) ?? null,
   lastMessage: (data.lastMessage as string | undefined) ?? undefined,
   lastMessageType: (data.lastMessageType as ChatMessageType | undefined) ?? undefined,
   lastMessageSenderId: (data.lastMessageSenderId as string | undefined) ?? undefined,
-  lastMessageAt: (data.lastMessageAt as Timestamp | undefined) ?? null,
+  lastMessageAt: (data.lastMessageAt as DateInput | undefined) ?? null,
   pinnedMessageId: (data.pinnedMessageId as string | undefined) ?? null,
-  pinnedAt: (data.pinnedAt as Timestamp | undefined) ?? null,
+  pinnedAt: (data.pinnedAt as DateInput | undefined) ?? null,
   unreadCountByUser: (data.unreadCountByUser as Record<string, number> | undefined) ?? {},
-  lastReadAtByUser: (data.lastReadAtByUser as Record<string, Timestamp | null> | undefined) ?? {},
+  lastReadAtByUser: (data.lastReadAtByUser as Record<string, DateInput> | undefined) ?? {},
 });
 
 const buildUserChatsQuery = (uid: string) => query(collection(requireDb(), 'chats'), where('participants', 'array-contains', uid));
@@ -159,19 +159,19 @@ const mapMessage = (id: string, data: Record<string, unknown>): ChatMessage => (
   text: (data.text as string | undefined) ?? '',
   senderId: data.senderId as string,
   type: (data.type as ChatMessageType | undefined) ?? 'text',
-  createdAt: (data.createdAt as Timestamp | undefined) ?? null,
+  createdAt: (data.createdAt as DateInput | undefined) ?? null,
   mediaUrl: (data.mediaUrl as string | undefined) ?? null,
   audioUrl: (data.audioUrl as string | undefined) ?? null,
   location: (data.location as ChatLocation | undefined) ?? null,
   replyTo: (data.replyTo as ChatMessage['replyTo']) ?? null,
   forwardedFrom: (data.forwardedFrom as string | undefined) ?? null,
-  editedAt: (data.editedAt as Timestamp | undefined) ?? null,
+  editedAt: (data.editedAt as DateInput | undefined) ?? null,
   isPinned: Boolean(data.isPinned),
   isStarredBy: (data.isStarredBy as string[] | undefined) ?? [],
   deletedFor: (data.deletedFor as string[] | undefined) ?? [],
   reactions: (data.reactions as Record<string, string[]> | undefined) ?? {},
-  deliveredAt: (data.deliveredAt as Timestamp | undefined) ?? null,
-  readAt: (data.readAt as Timestamp | undefined) ?? null,
+  deliveredAt: (data.deliveredAt as DateInput | undefined) ?? null,
+  readAt: (data.readAt as DateInput | undefined) ?? null,
 });
 
 const fetchBlobFromUri = async (uri: string) => {
@@ -259,7 +259,7 @@ export const getUserChats = async (uid: string): Promise<Chat[]> => {
 
     return snapshot.docs
       .map((docSnapshot) => mapChat(docSnapshot.id, docSnapshot.data()))
-      .sort((a, b) => (b.lastMessageAt?.toMillis() ?? b.updatedAt?.toMillis() ?? 0) - (a.lastMessageAt?.toMillis() ?? a.updatedAt?.toMillis() ?? 0));
+      .sort((a, b) => (toSafeMillis(b.lastMessageAt) || toSafeMillis(b.updatedAt)) - (toSafeMillis(a.lastMessageAt) || toSafeMillis(a.updatedAt)));
   } catch (error) {
     throw mapFirestoreError(error);
   }
@@ -274,7 +274,7 @@ export const listenUserChats = (uid: string, callback: (chats: Chat[]) => void, 
         .map((docSnapshot) => mapChat(docSnapshot.id, docSnapshot.data()))
         .sort(
           (a, b) =>
-            (b.lastMessageAt?.toMillis() ?? b.updatedAt?.toMillis() ?? 0) - (a.lastMessageAt?.toMillis() ?? a.updatedAt?.toMillis() ?? 0),
+            (toSafeMillis(b.lastMessageAt) || toSafeMillis(b.updatedAt)) - (toSafeMillis(a.lastMessageAt) || toSafeMillis(a.updatedAt)),
         );
       callback(chats);
     },

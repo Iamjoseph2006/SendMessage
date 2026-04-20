@@ -1,17 +1,18 @@
 import { StatusItem } from '@/src/features/status/services/statusService';
+import { toSafeMillis } from '@/src/shared/utils/date';
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
 export const getRelativeStatusTime = (status: StatusItem): string => {
-  const createdAtDate = status.createdAt?.toDate();
+  const createdAtMillis = toSafeMillis(status.createdAt);
 
-  if (!createdAtDate) {
+  if (!createdAtMillis) {
     return 'Hace un momento';
   }
 
-  const elapsed = Date.now() - createdAtDate.getTime();
+  const elapsed = Date.now() - createdAtMillis;
 
   if (elapsed < MINUTE) {
     return 'Ahora mismo';
