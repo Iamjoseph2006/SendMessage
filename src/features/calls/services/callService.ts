@@ -1,4 +1,4 @@
-import { FirestoreError, QuerySnapshot, addDoc, collection, getDocs, onSnapshot, orderBy, query, serverTimestamp, where } from 'firebase/firestore';
+import { QuerySnapshot, addDoc, collection, deleteDoc, doc, getDocs, onSnapshot, query, serverTimestamp, where } from 'firebase/firestore';
 import { db } from '@/src/config/firebase';
 import { mapFirebaseErrorToSpanish } from '@/src/config/firebaseErrors';
 import { DateInput, toSafeMillis } from '@/src/shared/utils/date';
@@ -23,14 +23,8 @@ const requireDb = () => {
   return db;
 };
 
-const mapCallsError = (error: unknown): Error => {
-  const firestoreError = error as Partial<FirestoreError>;
-  if (firestoreError?.code === 'failed-precondition') {
-    return new Error('Falta un índice de Firestore para consultas de llamadas/historial. Despliega firestore.indexes.json.');
-  }
-
-  return mapFirebaseErrorToSpanish(error, 'No se pudo consultar el historial de llamadas.');
-};
+const mapCallsError = (error: unknown): Error =>
+  mapFirebaseErrorToSpanish(error, 'No se pudo consultar el historial de llamadas.');
 
 const mapCallLog = (docSnapshot: { id: string; data: () => Record<string, unknown> }): CallLog => {
   const data = docSnapshot.data();
@@ -58,9 +52,9 @@ const dedupeCallLogs = (calls: CallLog[]) => {
 };
 
 const buildCallerHistoryQuery = (userId: string) =>
-  query(collection(requireDb(), 'calls'), where('callerId', '==', userId), orderBy('createdAt', 'desc'));
+  query(collection(requireDb(), 'calls'), where('callerId', '==', userId));
 const buildReceiverHistoryQuery = (userId: string) =>
-  query(collection(requireDb(), 'calls'), where('receiverId', '==', userId), orderBy('createdAt', 'desc'));
+  query(collection(requireDb(), 'calls'), where('receiverId', '==', userId));
 
 const mapCallSnapshots = (snapshots: QuerySnapshot[]) =>
   sortCallsByDateDesc(
@@ -86,6 +80,14 @@ export const createCall = async (
   });
 
   return snapshot.id;
+};
+
+export const deleteCall = async (callId: string): Promise<void> => {
+  try {
+    await deleteDoc(doc(requireDb(), 'calls', callId));
+  } catch (error) {
+    throw mapFirebaseErrorToSpanish(error, 'No se pudo eliminar la llamada.');
+  }
 };
 
 export const getCallHistory = async (userId: string): Promise<CallLog[]> => {

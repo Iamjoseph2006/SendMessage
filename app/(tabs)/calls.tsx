@@ -1,9 +1,9 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ImageBackground, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, ImageBackground, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/features/auth/hooks/useAuth';
-import { CallLog, CallType, createCall, listenCallHistory } from '@/src/features/calls/services/callService';
+import { CallLog, CallType, createCall, deleteCall, listenCallHistory } from '@/src/features/calls/services/callService';
 import { UserProfile, getUsers } from '@/src/features/users/services/userService';
 import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
 import { getAvatarInitials } from '@/src/shared/utils/avatar';
@@ -90,6 +90,24 @@ export default function CallsScreen() {
     return { missed, outgoing, total: calls.length };
   }, [calls, user?.uid]);
 
+  const onDeleteCall = (call: CallLog) => {
+    Alert.alert('Eliminar llamada', '¿Quieres borrar este registro del historial?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Eliminar',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteCall(call.id);
+            setError(null);
+          } catch (deleteError) {
+            setError(deleteError instanceof Error ? deleteError.message : 'No se pudo eliminar la llamada.');
+          }
+        },
+      },
+    ]);
+  };
+
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background }]}> 
       <View style={[styles.header, { paddingTop: insets.top + 4 }]}> 
@@ -101,9 +119,9 @@ export default function CallsScreen() {
         <View style={[styles.summaryRow, { backgroundColor: palette.surface, borderColor: palette.border }]}> 
           <View style={styles.summaryItem}><Text style={[styles.summaryValue, { color: palette.textPrimary }]}>{groupedSummary.total}</Text><Text style={[styles.summaryLabel, { color: palette.textSecondary }]}>Total</Text></View>
           <View style={styles.summaryDivider} />
-          <View style={styles.summaryItem}><Text style={[styles.summaryValue, { color: '#E45858' }]}>{groupedSummary.missed}</Text><Text style={[styles.summaryLabel, { color: palette.textSecondary }]}>Perdidas</Text></View>
+          <View style={styles.summaryItem}><Text style={[styles.summaryValue, { color: palette.textPrimary }]}>{groupedSummary.missed}</Text><Text style={[styles.summaryLabel, { color: palette.textSecondary }]}>Perdidas</Text></View>
           <View style={styles.summaryDivider} />
-          <View style={styles.summaryItem}><Text style={[styles.summaryValue, { color: isDark ? '#99C4FF' : '#1F6FE5' }]}>{groupedSummary.outgoing}</Text><Text style={[styles.summaryLabel, { color: palette.textSecondary }]}>Salientes</Text></View>
+          <View style={styles.summaryItem}><Text style={[styles.summaryValue, { color: palette.textPrimary }]}>{groupedSummary.outgoing}</Text><Text style={[styles.summaryLabel, { color: palette.textSecondary }]}>Salientes</Text></View>
         </View>
 
         <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>Contactos frecuentes</Text>
@@ -114,11 +132,11 @@ export default function CallsScreen() {
               <View style={[styles.avatar, { backgroundColor: isDark ? '#20314A' : '#E8F1FF' }]}><Text style={[styles.avatarText, { color: isDark ? '#D9E8FF' : '#1E3A66' }]}>{getAvatarInitials(displayName)}</Text></View>
               <View style={styles.dataWrap}><Text style={[styles.name, { color: palette.textPrimary }]}>{displayName}</Text><Text style={[styles.meta, { color: palette.textSecondary }]}>{directoryUser.email}</Text></View>
               <View style={styles.actions}>
-                <Pressable style={[styles.iconAction, { backgroundColor: isDark ? '#203244' : '#EAF2FF', borderColor: isDark ? '#2A3F57' : '#D3E2FF' }]} onPress={() => triggerCall(directoryUser, 'voice')}>
-                  <Ionicons name="call-outline" size={18} color={isDark ? '#8FD9A7' : '#0D8C3F'} />
+                <Pressable style={[styles.iconAction, { backgroundColor: palette.background, borderColor: palette.border }]} onPress={() => triggerCall(directoryUser, 'voice')}>
+                  <Ionicons name="call-outline" size={18} color={palette.textPrimary} />
                 </Pressable>
-                <Pressable style={[styles.iconAction, { backgroundColor: isDark ? '#203244' : '#EAF2FF', borderColor: isDark ? '#2A3F57' : '#D3E2FF' }]} onPress={() => triggerCall(directoryUser, 'video')}>
-                  <Ionicons name="videocam-outline" size={20} color={isDark ? '#A7C9FF' : '#1F6FE5'} />
+                <Pressable style={[styles.iconAction, { backgroundColor: palette.background, borderColor: palette.border }]} onPress={() => triggerCall(directoryUser, 'video')}>
+                  <Ionicons name="videocam-outline" size={20} color={palette.textPrimary} />
                 </Pressable>
               </View>
             </View>
@@ -132,7 +150,7 @@ export default function CallsScreen() {
           const counterpartId = direction === 'outgoing' ? call.receiverId : call.callerId;
           const counterpartName = usersById[counterpartId] ?? counterpartId;
           const isMissed = call.status === 'missed';
-          const directionColor = isMissed ? '#E45858' : direction === 'outgoing' ? (isDark ? '#9EC7FF' : '#1F6FE5') : (isDark ? '#84D4A0' : '#0F8F46');
+          const directionColor = palette.textSecondary;
           const directionIcon = isMissed ? 'arrow-down-circle-outline' : direction === 'outgoing' ? 'arrow-up-outline' : 'arrow-down-outline';
 
           return (
@@ -145,6 +163,9 @@ export default function CallsScreen() {
                 <Text style={[styles.historyMeta, { color: directionColor }]}>{isMissed ? 'Perdida' : direction === 'outgoing' ? 'Saliente' : 'Entrante'} · {call.type === 'video' ? 'Videollamada' : 'Llamada'}</Text>
               </View>
               <Text style={[styles.historyDate, { color: palette.textSecondary }]}>{formatCallMoment(call.createdAt)}</Text>
+              <Pressable onPress={() => onDeleteCall(call)} style={[styles.deleteAction, { borderColor: palette.border, backgroundColor: palette.background }]}>
+                <Ionicons name="trash-outline" size={16} color={palette.textSecondary} />
+              </Pressable>
             </View>
           );
         })}
@@ -198,6 +219,7 @@ const styles = StyleSheet.create({
   historyName: { fontSize: 15, fontWeight: '700' },
   historyMeta: { fontSize: 12, fontWeight: '600' },
   historyDate: { fontSize: 12, fontWeight: '500' },
+  deleteAction: { marginLeft: 6, width: 30, height: 30, borderRadius: 15, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   error: { color: '#D93025' },
   callScreen: { ...StyleSheet.absoluteFillObject },
   callBg: { opacity: 0.35 },
