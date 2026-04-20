@@ -539,3 +539,26 @@ export const markChatAsRead = async (chatId: string, userId: string): Promise<vo
 
   await batch.commit();
 };
+
+export const markChatAsDelivered = async (chatId: string, userId: string): Promise<void> => {
+  const firestore = requireDb();
+  const messageSnapshot = await getDocs(query(collection(firestore, 'messages'), where('chatId', '==', chatId)));
+  const batch = writeBatch(firestore);
+
+  let hasUpdates = false;
+  messageSnapshot.docs.forEach((messageDoc) => {
+    const data = messageDoc.data();
+    if (data.senderId === userId || data.deliveredAt != null) {
+      return;
+    }
+
+    batch.update(messageDoc.ref, {
+      deliveredAt: serverTimestamp(),
+    });
+    hasUpdates = true;
+  });
+
+  if (hasUpdates) {
+    await batch.commit();
+  }
+};

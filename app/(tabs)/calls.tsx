@@ -3,10 +3,27 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ImageBackground, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/features/auth/hooks/useAuth';
-import { createCall, listenCallHistory, CallLog, CallType } from '@/src/features/calls/services/callService';
-import { getUsers, UserProfile } from '@/src/features/users/services/userService';
+import { CallLog, CallType, createCall, listenCallHistory } from '@/src/features/calls/services/callService';
+import { UserProfile, getUsers } from '@/src/features/users/services/userService';
 import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
 import { getAvatarInitials } from '@/src/shared/utils/avatar';
+import { toSafeDate } from '@/src/shared/utils/date';
+
+const formatCallMoment = (createdAt?: CallLog['createdAt']) => {
+  const date = toSafeDate(createdAt);
+  if (!date) return 'Sin fecha';
+  return new Intl.DateTimeFormat('es-ES', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+};
+
+const getCallDirection = (call: CallLog, userId?: string) => {
+  if (!userId) return 'incoming' as const;
+  return call.callerId === userId ? 'outgoing' : 'incoming';
+};
 
 export default function CallsScreen() {
   const { user } = useAuth();
@@ -23,22 +40,37 @@ export default function CallsScreen() {
     if (!user?.uid) return;
     try {
       const directory = await getUsers(user.uid);
-      setUsers(directory.slice(0, 8));
+      setUsers(directory.slice(0, 10));
       setError(null);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'No se pudo cargar llamadas.');
     }
   }, [user?.uid]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   useEffect(() => {
     if (!user?.uid) return;
-    const unsubscribe = listenCallHistory(user.uid, (nextCalls) => { setCalls(nextCalls); setError(null); }, (listenError) => setError(listenError.message));
+    const unsubscribe = listenCallHistory(
+      user.uid,
+      (nextCalls) => {
+        setCalls(nextCalls);
+        setError(null);
+      },
+      (listenError) => setError(listenError.message),
+    );
     return unsubscribe;
   }, [user?.uid]);
 
-  const usersById = useMemo(() => users.reduce<Record<string, string>>((acc, item) => { acc[item.uid] = item.name || item.email; return acc; }, {}), [users]);
+  const usersById = useMemo(
+    () => users.reduce<Record<string, string>>((acc, item) => {
+      acc[item.uid] = item.name || item.email;
+      return acc;
+    }, {}),
+    [users],
+  );
 
   const triggerCall = async (receiver: UserProfile, mode: CallType) => {
     if (!user?.uid) return;
@@ -52,32 +84,71 @@ export default function CallsScreen() {
     }
   };
 
+  const groupedSummary = useMemo(() => {
+    const missed = calls.filter((call) => call.status === 'missed').length;
+    const outgoing = calls.filter((call) => getCallDirection(call, user?.uid) === 'outgoing').length;
+    return { missed, outgoing, total: calls.length };
+  }, [calls, user?.uid]);
+
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background }]}> 
-      <View style={[styles.header, { paddingTop: insets.top + 4 }]}><Text style={[styles.headerTitle, { color: palette.textPrimary }]}>Llamadas</Text></View>
+      <View style={[styles.header, { paddingTop: insets.top + 4 }]}> 
+        <Text style={[styles.headerTitle, { color: palette.textPrimary }]}>Llamadas</Text>
+        <Text style={[styles.headerSubtitle, { color: palette.textSecondary }]}>Llama rápido y revisa tu historial reciente.</Text>
+      </View>
 
       <ScrollView contentContainerStyle={styles.container}>
+        <View style={[styles.summaryRow, { backgroundColor: palette.surface, borderColor: palette.border }]}> 
+          <View style={styles.summaryItem}><Text style={[styles.summaryValue, { color: palette.textPrimary }]}>{groupedSummary.total}</Text><Text style={[styles.summaryLabel, { color: palette.textSecondary }]}>Total</Text></View>
+          <View style={styles.summaryDivider} />
+          <View style={styles.summaryItem}><Text style={[styles.summaryValue, { color: '#E45858' }]}>{groupedSummary.missed}</Text><Text style={[styles.summaryLabel, { color: palette.textSecondary }]}>Perdidas</Text></View>
+          <View style={styles.summaryDivider} />
+          <View style={styles.summaryItem}><Text style={[styles.summaryValue, { color: isDark ? '#99C4FF' : '#1F6FE5' }]}>{groupedSummary.outgoing}</Text><Text style={[styles.summaryLabel, { color: palette.textSecondary }]}>Salientes</Text></View>
+        </View>
+
+        <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>Contactos frecuentes</Text>
         {users.map((directoryUser) => {
           const displayName = directoryUser.name || directoryUser.email;
           return (
             <View style={[styles.row, { backgroundColor: palette.surface, borderColor: palette.border }]} key={directoryUser.uid}>
-              <View style={[styles.avatar, { backgroundColor: isDark ? '#20314A' : '#E8F1FF' }]}><Text style={[styles.avatarText, { color: palette.textPrimary }]}>{getAvatarInitials(displayName)}</Text></View>
+              <View style={[styles.avatar, { backgroundColor: isDark ? '#20314A' : '#E8F1FF' }]}><Text style={[styles.avatarText, { color: isDark ? '#D9E8FF' : '#1E3A66' }]}>{getAvatarInitials(displayName)}</Text></View>
               <View style={styles.dataWrap}><Text style={[styles.name, { color: palette.textPrimary }]}>{displayName}</Text><Text style={[styles.meta, { color: palette.textSecondary }]}>{directoryUser.email}</Text></View>
               <View style={styles.actions}>
-                <Pressable style={styles.iconAction} onPress={() => triggerCall(directoryUser, 'voice')}><Ionicons name="call" size={18} color="#63D481" /></Pressable>
-                <Pressable style={styles.iconAction} onPress={() => triggerCall(directoryUser, 'video')}><Ionicons name="videocam" size={20} color="#78A9FF" /></Pressable>
+                <Pressable style={[styles.iconAction, { backgroundColor: isDark ? '#203244' : '#EAF2FF', borderColor: isDark ? '#2A3F57' : '#D3E2FF' }]} onPress={() => triggerCall(directoryUser, 'voice')}>
+                  <Ionicons name="call-outline" size={18} color={isDark ? '#8FD9A7' : '#0D8C3F'} />
+                </Pressable>
+                <Pressable style={[styles.iconAction, { backgroundColor: isDark ? '#203244' : '#EAF2FF', borderColor: isDark ? '#2A3F57' : '#D3E2FF' }]} onPress={() => triggerCall(directoryUser, 'video')}>
+                  <Ionicons name="videocam-outline" size={20} color={isDark ? '#A7C9FF' : '#1F6FE5'} />
+                </Pressable>
               </View>
             </View>
           );
         })}
 
-        <Text style={[styles.historyTitle, { color: palette.textPrimary }]}>Historial</Text>
+        <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>Historial</Text>
         {!calls.length ? <Text style={[styles.meta, { color: palette.textSecondary }]}>Aún no hay llamadas registradas.</Text> : null}
         {calls.map((call) => {
-          const isCaller = call.callerId === user?.uid;
-          const counterpartId = isCaller ? call.receiverId : call.callerId;
-          return <Text key={call.id} style={[styles.meta, { color: palette.textSecondary }]}>{isCaller ? 'Saliente' : 'Entrante'} · {usersById[counterpartId] ?? counterpartId} · {call.type} · {call.status}</Text>;
+          const direction = getCallDirection(call, user?.uid);
+          const counterpartId = direction === 'outgoing' ? call.receiverId : call.callerId;
+          const counterpartName = usersById[counterpartId] ?? counterpartId;
+          const isMissed = call.status === 'missed';
+          const directionColor = isMissed ? '#E45858' : direction === 'outgoing' ? (isDark ? '#9EC7FF' : '#1F6FE5') : (isDark ? '#84D4A0' : '#0F8F46');
+          const directionIcon = isMissed ? 'arrow-down-circle-outline' : direction === 'outgoing' ? 'arrow-up-outline' : 'arrow-down-outline';
+
+          return (
+            <View key={call.id} style={[styles.historyCard, { backgroundColor: palette.surface, borderColor: palette.border }]}> 
+              <View style={[styles.historyIconWrap, { backgroundColor: isDark ? '#1E2B3A' : '#EDF4FF' }]}>
+                <Ionicons name={directionIcon as any} size={18} color={directionColor} />
+              </View>
+              <View style={styles.historyTextWrap}>
+                <Text style={[styles.historyName, { color: palette.textPrimary }]}>{counterpartName}</Text>
+                <Text style={[styles.historyMeta, { color: directionColor }]}>{isMissed ? 'Perdida' : direction === 'outgoing' ? 'Saliente' : 'Entrante'} · {call.type === 'video' ? 'Videollamada' : 'Llamada'}</Text>
+              </View>
+              <Text style={[styles.historyDate, { color: palette.textSecondary }]}>{formatCallMoment(call.createdAt)}</Text>
+            </View>
+          );
         })}
+
         {error ? <Text style={styles.error}>{error}</Text> : null}
       </ScrollView>
 
@@ -103,9 +174,16 @@ export default function CallsScreen() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
-  header: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 },
+  header: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8, gap: 2 },
   headerTitle: { fontSize: 34, fontWeight: '800' },
+  headerSubtitle: { fontSize: 13 },
   container: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 100, gap: 12 },
+  summaryRow: { borderWidth: 1, borderRadius: 16, paddingVertical: 14, flexDirection: 'row', alignItems: 'center' },
+  summaryItem: { flex: 1, alignItems: 'center', gap: 2 },
+  summaryValue: { fontSize: 20, fontWeight: '800' },
+  summaryLabel: { fontSize: 12, fontWeight: '600' },
+  summaryDivider: { width: 1, alignSelf: 'stretch', backgroundColor: '#D0D7E4' },
+  sectionTitle: { marginTop: 8, fontWeight: '800', fontSize: 17 },
   row: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 14, padding: 12, gap: 12 },
   avatar: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
   avatarText: { fontWeight: '700' },
@@ -113,8 +191,13 @@ const styles = StyleSheet.create({
   name: { fontSize: 16, fontWeight: '700' },
   meta: { marginTop: 2, fontSize: 13 },
   actions: { flexDirection: 'row', gap: 8 },
-  iconAction: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#1B2532', alignItems: 'center', justifyContent: 'center' },
-  historyTitle: { marginTop: 6, fontWeight: '700', fontSize: 16 },
+  iconAction: { width: 38, height: 38, borderRadius: 19, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  historyCard: { borderWidth: 1, borderRadius: 14, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  historyIconWrap: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  historyTextWrap: { flex: 1, gap: 2 },
+  historyName: { fontSize: 15, fontWeight: '700' },
+  historyMeta: { fontSize: 12, fontWeight: '600' },
+  historyDate: { fontSize: 12, fontWeight: '500' },
   error: { color: '#D93025' },
   callScreen: { ...StyleSheet.absoluteFillObject },
   callBg: { opacity: 0.35 },
