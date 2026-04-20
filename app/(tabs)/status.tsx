@@ -9,6 +9,7 @@ import { buildMyStatusSubtitle, getRelativeStatusTime, getStatusPreview } from '
 import { getAvatarInitials } from '@/src/shared/utils/avatar';
 import { getUsersByUids } from '@/src/features/users/services/userService';
 import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
+import { toSafeMillis } from '@/src/shared/utils/date';
 
 type ContactStatusGroup = {
   userId: string;
@@ -67,10 +68,10 @@ export default function StatusScreen() {
       .map(([userId, items]) => ({
         userId,
         ownerName: usersById[userId] ?? 'Usuario',
-        latest: items.sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0))[0],
+        latest: items.sort((a, b) => toSafeMillis(b.createdAt) - toSafeMillis(a.createdAt))[0],
         unreadCount: items.filter((status) => !(status.viewedBy ?? []).includes(user?.uid ?? '')).length,
       }))
-      .sort((a, b) => (b.latest.createdAt?.toMillis() ?? 0) - (a.latest.createdAt?.toMillis() ?? 0));
+      .sort((a, b) => toSafeMillis(b.latest.createdAt) - toSafeMillis(a.latest.createdAt));
 
     return { myStatuses: mine, contactGroups: rows };
   }, [statuses, user?.uid, usersById]);

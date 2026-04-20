@@ -1,8 +1,22 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
 import { Chat, listenUserChats } from '@/src/features/chat/services/chatService';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { toSafeMillis } from '@/src/shared/utils/date';
 
 const buildCacheKey = (userId: string) => `user_chats_cache:${userId}`;
+
+const normalizeChatDates = (chat: Chat): Chat => ({
+  ...chat,
+  createdAt: toSafeMillis(chat.createdAt),
+  updatedAt: toSafeMillis(chat.updatedAt),
+  lastMessageAt: toSafeMillis(chat.lastMessageAt),
+  pinnedAt: toSafeMillis(chat.pinnedAt),
+  lastReadAtByUser: Object.fromEntries(
+    Object.entries(chat.lastReadAtByUser ?? {}).map(([uid, value]) => [uid, toSafeMillis(value)]),
+  ),
+});
+
+const normalizeChats = (chats: Chat[]) => chats.map(normalizeChatDates);
 
 export const useUserChats = (userId: string | null) => {
   const [chats, setChats] = useState<Chat[]>([]);
@@ -22,7 +36,7 @@ export const useUserChats = (userId: string | null) => {
     AsyncStorage.getItem(buildCacheKey(userId))
       .then((raw) => {
         if (raw) {
-          const cached = JSON.parse(raw) as Chat[];
+          const cached = normalizeChats(JSON.parse(raw) as Chat[]);
           setChats(cached);
           setLoading(false);
         }
@@ -32,8 +46,9 @@ export const useUserChats = (userId: string | null) => {
     const unsubscribe = listenUserChats(
       userId,
       (nextChats) => {
-        setChats(nextChats);
-        AsyncStorage.setItem(buildCacheKey(userId), JSON.stringify(nextChats)).catch(() => undefined);
+        const normalized = normalizeChats(nextChats);
+        setChats(normalized);
+        AsyncStorage.setItem(buildCacheKey(userId), JSON.stringify(normalized)).catch(() => undefined);
         setLoading(false);
       },
       (listenError) => {

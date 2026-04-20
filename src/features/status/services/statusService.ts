@@ -19,6 +19,7 @@ import {
 } from 'firebase/firestore';
 import { FirebaseStorage, getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage';
 import { app, db } from '@/src/config/firebase';
+import { DateInput, toSafeMillis } from '@/src/shared/utils/date';
 import { mapFirebaseErrorToSpanish } from '@/src/config/firebaseErrors';
 
 export type StatusLocation = {
@@ -41,8 +42,8 @@ export type StatusItem = {
   viewedBy?: string[];
   likesBy?: string[];
   backgroundColor?: string | null;
-  expiresAt?: Timestamp | null;
-  createdAt?: Timestamp | null;
+  expiresAt?: DateInput;
+  createdAt?: DateInput;
 };
 
 export type CreateStatusInput = {
@@ -59,7 +60,7 @@ export type StatusComment = {
   statusId: string;
   userId: string;
   text: string;
-  createdAt?: Timestamp | null;
+  createdAt?: DateInput;
 };
 
 const STATUS_DURATION_MS = 24 * 60 * 60 * 1000;
@@ -134,13 +135,13 @@ const mapStatus = (id: string, data: Record<string, any>): StatusItem => {
     viewedBy: (data.viewedBy as string[] | undefined) ?? [],
     likesBy: (data.likesBy as string[] | undefined) ?? [],
     backgroundColor: (data.backgroundColor as string | undefined) ?? null,
-    expiresAt: (data.expiresAt as Timestamp | undefined) ?? null,
-    createdAt: (data.createdAt as Timestamp | undefined) ?? null,
+    expiresAt: (data.expiresAt as DateInput | undefined) ?? null,
+    createdAt: (data.createdAt as DateInput | undefined) ?? null,
   };
 };
 
 const isExpired = (status: StatusItem) => {
-  const expiry = status.expiresAt?.toMillis();
+  const expiry = toSafeMillis(status.expiresAt);
   return typeof expiry === 'number' ? expiry < Date.now() : false;
 };
 
@@ -254,7 +255,7 @@ const mapComment = (id: string, data: Record<string, unknown>): StatusComment =>
   statusId: (data.statusId as string | undefined) ?? '',
   userId: (data.userId as string | undefined) ?? '',
   text: ((data.text as string | undefined) ?? '').trim(),
-  createdAt: (data.createdAt as Timestamp | undefined) ?? null,
+  createdAt: (data.createdAt as DateInput | undefined) ?? null,
 });
 
 export const addStatusComment = async (statusId: string, userId: string, text: string): Promise<string> => {

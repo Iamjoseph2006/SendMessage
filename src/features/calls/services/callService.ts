@@ -1,6 +1,7 @@
-import { FirestoreError, Timestamp, addDoc, collection, getDocs, onSnapshot, or, orderBy, query, serverTimestamp, where } from 'firebase/firestore';
+import { FirestoreError, addDoc, collection, getDocs, onSnapshot, or, orderBy, query, serverTimestamp, where } from 'firebase/firestore';
 import { db } from '@/src/config/firebase';
 import { mapFirebaseErrorToSpanish } from '@/src/config/firebaseErrors';
+import { DateInput } from '@/src/shared/utils/date';
 
 export type CallType = 'voice' | 'video';
 export type CallStatus = 'missed' | 'completed' | 'rejected';
@@ -11,7 +12,7 @@ export type CallLog = {
   receiverId: string;
   type: CallType;
   status: CallStatus;
-  createdAt?: Timestamp | null;
+  createdAt?: DateInput;
 };
 
 const requireDb = () => {
@@ -39,7 +40,7 @@ const mapCallLog = (docSnapshot: { id: string; data: () => Record<string, unknow
     receiverId: data.receiverId as string,
     type: (data.type as CallType | undefined) ?? 'voice',
     status: (data.status as CallStatus | undefined) ?? 'completed',
-    createdAt: (data.createdAt as Timestamp | undefined) ?? null,
+    createdAt: (data.createdAt as DateInput | undefined) ?? null,
   };
 };
 
