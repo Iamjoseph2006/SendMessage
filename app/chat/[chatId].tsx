@@ -38,8 +38,9 @@ import { useChat } from '@/src/features/chat/hooks/useChat';
 import { ChatLocation, ChatMessage, getChatById, listenChatById, markChatAsRead } from '@/src/features/chat/services/chatService';
 import { getUsers, UserProfile, getUsersByUids, listenUserById } from '@/src/features/users/services/userService';
 import { AppIconButton } from '@/src/presentation/components/ui/AppIconButton';
-import { UserAvatar } from '@/src/presentation/components/ui/UserAvatar';
+import { ChatHeaderUser } from '@/src/presentation/components/chat/ChatHeaderUser';
 import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
+import { typography } from '@/src/presentation/theme/typography';
 import { toSafeDate, toSafeMillis } from '@/src/shared/utils/date';
 
 const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
@@ -109,11 +110,16 @@ export default function ConversationScreen() {
     react,
     loading,
     error,
+    isSendingMedia,
+    isSendingAudio,
   } = useChat(chatId ?? null, user?.uid ?? null);
 
   const [chatName, setChatName] = useState('Chat');
   const [contactProfile, setContactProfile] = useState<UserProfile | null>(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [recordingDraftUri, setRecordingDraftUri] = useState<string | null>(null);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [isProcessingRecording, setIsProcessingRecording] = useState(false);
   const [showAttachSheet, setShowAttachSheet] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [isListReady, setIsListReady] = useState(false);
@@ -278,6 +284,12 @@ export default function ConversationScreen() {
     recorder.stop().catch(() => undefined);
   }, [recorder]);
 
+  useEffect(() => {
+    if (!isRecording) return;
+    const timer = setInterval(() => setRecordingSeconds((current) => current + 1), 1000);
+    return () => clearInterval(timer);
+  }, [isRecording]);
+
   const openAttachPicker = () => {
     if (keyboardVisible) {
       setOpenAttachAfterKeyboardCloses(true);
@@ -377,23 +389,34 @@ export default function ConversationScreen() {
   };
 
   const onAudioPress = async () => {
-    if (isRecording) {
-      await recorder.stop();
-      if (recorder.uri) await sendAudio(recorder.uri);
+    try {
+      if (isRecording) {
+        setIsProcessingRecording(true);
+        await recorder.stop();
+        setRecordingDraftUri(recorder.uri ?? null);
+        setIsRecording(false);
+        setIsProcessingRecording(false);
+        return;
+      }
+
+      const permission = await requestRecordingPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permiso requerido', 'Debes conceder permiso de micrófono para enviar audios.');
+        return;
+      }
+
+      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+      await recorder.prepareToRecordAsync();
+      recorder.record();
+      setRecordingDraftUri(null);
+      setRecordingSeconds(0);
+      setIsRecording(true);
+    } catch (audioError) {
+      const message = audioError instanceof Error ? audioError.message : 'No se pudo grabar el audio.';
+      Alert.alert('Audio', message);
       setIsRecording(false);
-      return;
+      setIsProcessingRecording(false);
     }
-
-    const permission = await requestRecordingPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert('Permiso requerido', 'Debes conceder permiso de micrófono para enviar audios.');
-      return;
-    }
-
-    await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
-    await recorder.prepareToRecordAsync();
-    recorder.record();
-    setIsRecording(true);
   };
 
   const openContext = (message: ChatMessage) => {
@@ -508,20 +531,15 @@ export default function ConversationScreen() {
         style={styles.safeArea}>
         <View style={[styles.header, { borderBottomColor: palette.border, backgroundColor: palette.surface }]}> 
           <AppIconButton iconName="chevron-back" onPress={() => router.back()} variant="soft" />
-          <Pressable style={styles.headerTextWrap} onPress={() => router.push(`/chat/info/${chatId}`)}>
-            <UserAvatar uri={contactProfile?.photoURL} fallbackInitial={chatName} size={38} />
-            <View style={styles.headerMeta}>
-              <Text style={[styles.headerName, { color: palette.textPrimary }]} numberOfLines={1}>{chatName}</Text>
-              <Text style={[styles.headerSubtitle, { color: contactProfile?.online ? '#14A44D' : palette.textSecondary }]} numberOfLines={1}>{availabilityLabel}</Text>
-            </View>
-          </Pressable>
+          <ChatHeaderUser name={chatName} availabilityLabel={availabilityLabel} profile={contactProfile} onPress={() => router.push(`/chat/info/${chatId}`)} />
           <AppIconButton iconName="videocam-outline" onPress={handleVideoCall} variant="soft" />
           <AppIconButton iconName="call-outline" onPress={handleVoiceCall} variant="soft" />
-          <AppIconButton iconName="information-circle-outline" onPress={() => router.push(`/chat/info/${chatId}`)} variant="ghost" />
         </View>
 
         {loading ? <ActivityIndicator style={styles.loading} size="large" /> : null}
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {error ? <Text style={[styles.error, typography.caption]}>{error}</Text> : null}
+        {isSendingMedia ? <Text style={[styles.infoText, typography.caption, { color: palette.textSecondary }]}>Subiendo imagen…</Text> : null}
+        {isSendingAudio ? <Text style={[styles.infoText, typography.caption, { color: palette.textSecondary }]}>Subiendo audio…</Text> : null}
 
         <FlatList
           ref={listRef}
@@ -622,7 +640,7 @@ export default function ConversationScreen() {
               scrollToBottom(true);
             }}
           />
-          <AppIconButton iconName={isRecording ? 'stop' : 'mic'} variant="solid" onPress={onAudioPress} style={isRecording ? styles.audioActionRecording : undefined} />
+          <AppIconButton iconName={isRecording ? 'stop' : 'mic'} variant="solid" onPress={onAudioPress} disabled={isSendingAudio || isProcessingRecording} style={isRecording ? styles.audioActionRecording : undefined} />
           <AppIconButton
             iconName="send"
             variant="solid"
@@ -634,6 +652,44 @@ export default function ConversationScreen() {
             }}
           />
         </View>
+
+        {isRecording ? (
+          <View style={[styles.recordingBanner, { borderColor: palette.border, backgroundColor: palette.surface }]}> 
+            <View style={styles.recordingDot} />
+            <Text style={[styles.recordingText, typography.caption, { color: '#D93025' }]}>Grabando… {Math.floor(recordingSeconds / 60)}:{String(recordingSeconds % 60).padStart(2, '0')}</Text>
+          </View>
+        ) : null}
+
+        {recordingDraftUri ? (
+          <View style={[styles.audioDraftBar, { borderColor: palette.border, backgroundColor: palette.surface }]}> 
+            <View style={styles.audioDraftMeta}>
+              <Ionicons name="mic" size={16} color={palette.accent} />
+              <Text style={[styles.audioDraftLabel, typography.body, { color: palette.textPrimary }]}>Audio listo para enviar</Text>
+            </View>
+            <View style={styles.audioDraftActions}>
+              <Pressable onPress={() => setRecordingDraftUri(null)} style={styles.audioDraftButton}>
+                <Text style={[styles.audioDraftCancel, typography.caption]}>Cancelar</Text>
+              </Pressable>
+              <Pressable
+                onPress={async () => {
+                  if (!recordingDraftUri) return;
+                  try {
+                    await sendAudio(recordingDraftUri);
+                    setRecordingDraftUri(null);
+                    shouldAutoScrollOnSizeRef.current = true;
+                    scrollToBottom(true);
+                  } catch (uploadError) {
+                    Alert.alert('Audio', uploadError instanceof Error ? uploadError.message : 'No se pudo enviar el audio.');
+                  }
+                }}
+                style={[styles.audioDraftButton, styles.audioDraftSend]}
+                disabled={isSendingAudio}>
+                {isSendingAudio ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Text style={[styles.audioDraftSendLabel, typography.caption]}>Enviar</Text>}
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
+
         {showAttachSheet ? (
           <View
             style={[
@@ -765,10 +821,6 @@ export default function ConversationScreen() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   header: { minHeight: 60, flexDirection: 'row', alignItems: 'center', gap: 4, borderBottomWidth: StyleSheet.hairlineWidth, paddingHorizontal: 10 },
-  headerTextWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  headerMeta: { flex: 1, gap: 1 },
-  headerName: { fontSize: 18, fontWeight: '700' },
-  headerSubtitle: { fontSize: 12, fontWeight: '600' },
   loading: { marginTop: 12 },
   listContent: { paddingHorizontal: 12, paddingVertical: 14, gap: 8, flexGrow: 1 },
   bubble: { maxWidth: '84%', borderRadius: 20, paddingTop: 9, paddingBottom: 6, paddingHorizontal: 13, gap: 4 },
@@ -799,6 +851,7 @@ const styles = StyleSheet.create({
   input: { flex: 1, minHeight: 44, maxHeight: 120, borderWidth: 1, borderRadius: 20, paddingHorizontal: 14, paddingTop: 11, paddingBottom: 10, fontSize: 15, lineHeight: 20 },
   empty: { textAlign: 'center', marginTop: 22 },
   error: { color: '#D93025', marginHorizontal: 12, marginTop: 8 },
+  infoText: { marginHorizontal: 12, marginTop: 4 },
   inlineAttachPanel: { borderTopWidth: StyleSheet.hairlineWidth, borderTopLeftRadius: 18, borderTopRightRadius: 18, paddingTop: 16, paddingHorizontal: 18, flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
   sheetItem: { width: '22%', alignItems: 'center', gap: 6 },
   sheetIconCircle: { width: 56, height: 56, borderRadius: 28, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
@@ -815,4 +868,16 @@ const styles = StyleSheet.create({
   editActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12 },
   editActionButton: { paddingVertical: 6, paddingHorizontal: 8 },
   editActionText: { fontSize: 14, fontWeight: '700' },
+
+  recordingBanner: { borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: 12, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  recordingDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#D93025' },
+  recordingText: { fontSize: 12 },
+  audioDraftBar: { borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: 12, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  audioDraftMeta: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  audioDraftLabel: { fontSize: 13 },
+  audioDraftActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  audioDraftButton: { borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 },
+  audioDraftCancel: { color: '#6A7D95', fontSize: 12 },
+  audioDraftSend: { backgroundColor: '#1F7AE0', minWidth: 70, alignItems: 'center' },
+  audioDraftSendLabel: { color: '#FFFFFF', fontSize: 12 },
 });

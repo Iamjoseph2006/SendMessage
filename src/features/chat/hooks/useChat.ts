@@ -24,6 +24,8 @@ type UseChatResult = {
   loading: boolean;
   error: string | null;
   canSend: boolean;
+  isSendingMedia: boolean;
+  isSendingAudio: boolean;
   replyingTo: ChatMessage | null;
   setReplyingTo: (value: ChatMessage | null) => void;
   sendText: () => Promise<void>;
@@ -47,6 +49,8 @@ export const useChat = (chatId: string | null, senderId: string | null): UseChat
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
+  const [isSendingMedia, setIsSendingMedia] = useState(false);
+  const [isSendingAudio, setIsSendingAudio] = useState(false);
 
   useEffect(() => {
     if (!chatId) {
@@ -121,6 +125,7 @@ export const useChat = (chatId: string | null, senderId: string | null): UseChat
       setReplyingTo(null);
     } catch (sendError) {
       setError(mapError(sendError, 'No se pudo enviar el mensaje.'));
+      throw sendError;
     }
   };
 
@@ -149,28 +154,40 @@ export const useChat = (chatId: string | null, senderId: string | null): UseChat
   };
 
   const sendImage = async (localUri: string, caption = '') => {
-    if (!chatId || !senderId) {
+    if (!chatId || !senderId || isSendingMedia) {
       return;
     }
+
+    setIsSendingMedia(true);
+    setError(null);
 
     try {
       const url = await uploadChatMedia(chatId, localUri, 'image', senderId);
       await sendWithType({ text: caption, type: 'image', mediaUrl: url });
     } catch (sendError) {
       setError(mapError(sendError, 'No se pudo enviar la imagen.'));
+      throw sendError;
+    } finally {
+      setIsSendingMedia(false);
     }
   };
 
   const sendAudio = async (localUri: string) => {
-    if (!chatId || !senderId) {
+    if (!chatId || !senderId || isSendingAudio) {
       return;
     }
+
+    setIsSendingAudio(true);
+    setError(null);
 
     try {
       const url = await uploadChatMedia(chatId, localUri, 'audio', senderId);
       await sendWithType({ type: 'audio', audioUrl: url });
     } catch (sendError) {
       setError(mapError(sendError, 'No se pudo enviar el audio.'));
+      throw sendError;
+    } finally {
+      setIsSendingAudio(false);
     }
   };
 
@@ -279,6 +296,8 @@ export const useChat = (chatId: string | null, senderId: string | null): UseChat
     loading,
     error,
     canSend,
+    isSendingMedia,
+    isSendingAudio,
     replyingTo,
     setReplyingTo,
     sendText,

@@ -1,6 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
+import { typography } from '@/src/presentation/theme/typography';
 
 type Action = {
   key: string;
@@ -30,7 +31,7 @@ export function StatusActionBar({ actions }: { actions: Action[] }) {
             },
           ]}>
           <Ionicons name={action.icon} size={16} color="#FFFFFF" />
-          <Text style={styles.label}>{action.label}</Text>
+          <Text style={[styles.label, typography.caption]}>{action.label}</Text>
         </Pressable>
       ))}
     </View>
@@ -39,13 +40,6 @@ export function StatusActionBar({ actions }: { actions: Action[] }) {
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  action: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  label: { color: '#FFF', fontWeight: '700', fontSize: 13 },
+  action: { minWidth: 96, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 10 },
+  label: { color: '#FFF', fontSize: 13 },
 });
