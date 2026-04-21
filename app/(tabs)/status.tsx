@@ -9,6 +9,8 @@ import { buildMyStatusSubtitle, getRelativeStatusTime, getStatusPreview } from '
 import { getUsersByUids } from '@/src/features/users/services/userService';
 import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
 import { UserAvatar } from '@/src/presentation/components/ui/UserAvatar';
+import { EmptyStatusState } from '@/src/features/status/components/EmptyStatusState';
+import { typography } from '@/src/presentation/theme/typography';
 import { toSafeMillis } from '@/src/shared/utils/date';
 
 type ContactStatusGroup = {
@@ -103,8 +105,8 @@ export default function StatusScreen() {
           </View>
 
           <View style={styles.myStatusText}>
-            <Text style={[styles.title, { color: palette.textPrimary }]}>Mi estado</Text>
-            <Text style={[styles.subtitle, { color: palette.textSecondary }]}>{myStateSubtitle}</Text>
+            <Text style={[styles.title, typography.heading, { color: palette.textPrimary }]}>Mi estado</Text>
+            <Text style={[styles.subtitle, typography.body, { color: palette.textSecondary }]}>{myStateSubtitle}</Text>
           </View>
 
           <Pressable
@@ -115,7 +117,7 @@ export default function StatusScreen() {
         </Pressable>
 
         <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: palette.textSecondary }]}>Recientes</Text>
+          <Text style={[styles.sectionTitle, typography.caption, { color: palette.textSecondary }]}>Recientes</Text>
         </View>
 
         {contactGroups.length ? (
@@ -125,17 +127,15 @@ export default function StatusScreen() {
                 <UserAvatar uri={userPhotoById[group.userId]} fallbackInitial={group.ownerName} size={40} />
               </View>
               <View style={styles.statusTextWrap}>
-                <Text style={[styles.title, { color: palette.textPrimary }]}>{group.ownerName}</Text>
-                <Text style={[styles.subtitle, { color: palette.textSecondary }]}>
+                <Text style={[styles.title, typography.heading, { color: palette.textPrimary }]}>{group.ownerName}</Text>
+                <Text style={[styles.subtitle, typography.body, { color: palette.textSecondary }]}>
                   {getStatusPreview(group.latest)} · {getRelativeStatusTime(group.latest)}
                 </Text>
               </View>
             </Pressable>
           ))
         ) : (
-          <View style={[styles.emptyBlock, { borderColor: palette.border, backgroundColor: palette.surface }]}> 
-            <Text style={[styles.emptyText, { color: palette.textSecondary }]}>Aún no hay estados recientes de tus contactos.</Text>
-          </View>
+          <EmptyStatusState />
         )}
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -185,9 +185,7 @@ const styles = StyleSheet.create({
   storyRing: { width: 52, height: 52, borderRadius: 26, borderWidth: 3, backgroundColor: '#F5FAFF', alignItems: 'center', justifyContent: 'center' },
   storyRingUnread: { borderColor: '#1F7AE0' },
   storyRingRead: { borderColor: '#A9B9CA' },
-  title: { color: '#22354D', fontWeight: '700', fontSize: 16 },
+  title: { color: '#22354D', fontSize: 16 },
   subtitle: { color: '#6A7D95', marginTop: 1 },
-  emptyBlock: { borderWidth: 1, borderRadius: 12, padding: 14 },
-  emptyText: { fontSize: 14 },
   error: { color: '#D93025' },
 });

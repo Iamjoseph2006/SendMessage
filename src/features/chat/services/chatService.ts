@@ -185,17 +185,18 @@ const fetchBlobFromUri = async (uri: string) => {
     throw new Error('No se pudo leer el archivo multimedia.');
   }
 
-  return response.blob();
+  const blob = await response.blob();
+  return { blob, contentType: blob.type };
 };
 
 export const uploadChatMedia = async (chatId: string, uri: string, kind: 'image' | 'audio', senderId: string): Promise<string> => {
   try {
     const storage = getStorageInstance();
-    const blob = await fetchBlobFromUri(uri);
+    const { blob, contentType } = await fetchBlobFromUri(uri);
     const extension = uri.split('.').pop()?.split('?')[0] ?? (kind === 'image' ? 'jpg' : 'm4a');
     const path = `chats/${chatId}/${kind}s/${senderId}_${Date.now()}.${extension}`;
     const mediaRef = ref(storage, path);
-    await uploadBytes(mediaRef, blob, { contentType: kind === 'image' ? 'image/jpeg' : 'audio/m4a' });
+    await uploadBytes(mediaRef, blob, { contentType: contentType || (kind === 'image' ? 'image/jpeg' : 'audio/m4a') });
     return await getDownloadURL(mediaRef);
   } catch (error) {
     throw mapFirebaseErrorToSpanish(error, 'No se pudo subir el archivo multimedia.');

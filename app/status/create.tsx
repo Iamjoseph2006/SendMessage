@@ -5,6 +5,7 @@ import {
   setAudioModeAsync,
   useAudioRecorder,
 } from 'expo-audio';
+import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { Stack, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
@@ -16,16 +17,17 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
-import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/features/auth/hooks/useAuth';
+import { EmptyStatusState } from '@/src/features/status/components/EmptyStatusState';
 import { StatusActionBar } from '@/src/features/status/components/StatusActionBar';
+import { StatusComposer } from '@/src/features/status/components/StatusComposer';
 import { StatusPreviewCard } from '@/src/features/status/components/StatusPreviewCard';
 import { CreateStatusInput, StatusLocation, createStatus } from '@/src/features/status/services/statusService';
 import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
+import { typography } from '@/src/presentation/theme/typography';
 
 const EMOJIS = ['😀', '😂', '😍', '🔥', '🙏', '💙', '🎉', '😎'];
 const TEXT_BG_COLORS = ['#1F7AE0', '#3F8C5A', '#8A4FFF', '#C96200', '#29323D', '#BE2F6B'];
@@ -55,20 +57,34 @@ export default function CreateStatusScreen() {
 
   const hasAnyContent = useMemo(() => Boolean(content.trim() || selectedImageUri || audioUri || location), [audioUri, content, location, selectedImageUri]);
 
-  const onPickImage = async () => {
+  const pickImage = async (source: 'camera' | 'library') => {
     setError(null);
-    const result = await launchImageLibrary({ mediaType: 'photo' });
-    if (result.errorMessage) return setError(result.errorMessage);
-    const uri = result.assets?.[0]?.uri;
-    if (uri) setSelectedImageUri(uri);
-  };
+    try {
+      const permission =
+        source === 'camera'
+          ? await ImagePicker.requestCameraPermissionsAsync()
+          : await ImagePicker.requestMediaLibraryPermissionsAsync();
 
-  const onTakePhoto = async () => {
-    setError(null);
-    const result = await launchCamera({ mediaType: 'photo' });
-    if (result.errorMessage) return setError(result.errorMessage);
-    const uri = result.assets?.[0]?.uri;
-    if (uri) setSelectedImageUri(uri);
+      if (!permission.granted) {
+        setError(source === 'camera' ? 'Debes conceder permisos de cámara.' : 'Debes conceder permisos de galería.');
+        return;
+      }
+
+      const result =
+        source === 'camera'
+          ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.9, allowsEditing: false })
+          : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.9, allowsEditing: false, selectionLimit: 1 });
+
+      if (result.canceled) return;
+      const uri = result.assets?.[0]?.uri;
+      if (!uri) {
+        setError('No se pudo obtener la imagen.');
+        return;
+      }
+      setSelectedImageUri(uri);
+    } catch (pickError) {
+      setError(pickError instanceof Error ? pickError.message : 'Error al seleccionar imagen.');
+    }
   };
 
   const onPickLocation = async () => {
@@ -98,6 +114,7 @@ export default function CreateStatusScreen() {
     await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
     await recorder.prepareToRecordAsync();
     recorder.record();
+    setAudioUri(null);
     setIsRecording(true);
   };
 
@@ -106,10 +123,11 @@ export default function CreateStatusScreen() {
     setAudioUri(null);
     setLocation(null);
     setPickedEmojis([]);
+    setError(null);
   };
 
   const onCreateStatus = async () => {
-    if (!user?.uid || !hasAnyContent || saving) return;
+    if (!user?.uid || !hasAnyContent || saving || isRecording) return;
 
     setSaving(true);
     setError(null);
@@ -146,12 +164,17 @@ export default function CreateStatusScreen() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.safeArea} keyboardVerticalOffset={Math.max(0, insets.top - 4)}>
         <ScrollView contentContainerStyle={[styles.container, { paddingBottom: Math.max(20, insets.bottom + 10) }]} keyboardShouldPersistTaps="handled">
           <View style={styles.headerRow}>
-            <Text style={[styles.label, { color: palette.textPrimary }]}>Crear estado</Text>
+            <View>
+              <Text style={[styles.label, typography.title, { color: palette.textPrimary }]}>Crear estado</Text>
+              <Text style={[styles.subLabel, typography.body, { color: palette.textSecondary }]}>Comparte texto, foto, audio o ubicación</Text>
+            </View>
             <Pressable onPress={clearAttachments} style={[styles.ghostAction, { borderColor: palette.border }]}>
-              <Ionicons name="refresh" size={14} color={palette.textSecondary} />
-              <Text style={[styles.ghostActionText, { color: palette.textSecondary }]}>Limpiar</Text>
+              <Ionicons name="trash-outline" size={14} color={palette.textSecondary} />
+              <Text style={[styles.ghostActionText, typography.caption, { color: palette.textSecondary }]}>Descartar</Text>
             </Pressable>
           </View>
+
+          {!hasAnyContent ? <EmptyStatusState /> : null}
 
           <StatusPreviewCard
             text={content}
@@ -162,37 +185,30 @@ export default function CreateStatusScreen() {
             backgroundColor={backgroundColor}
           />
 
-          <View style={[styles.editorCard, { borderColor: palette.border, backgroundColor: palette.surface }]}> 
-            <Text style={[styles.fieldLabel, { color: palette.textSecondary }]}>Texto</Text>
-            <TextInput
-              value={content}
-              onChangeText={setContent}
-              editable={!saving}
-              multiline
-              placeholder="Escribe algo para tu estado..."
-              placeholderTextColor={palette.textSecondary}
-              style={[styles.input, { color: palette.textPrimary, borderColor: palette.border, backgroundColor: isDark ? '#111822' : '#F7FAFF' }]}
-            />
-            {!selectedImageUri && !audioUri && !location ? (
+          <StatusComposer value={content} onChangeText={setContent} editable={!saving} />
+
+          {!selectedImageUri && !audioUri && !location ? (
+            <View style={[styles.editorCard, { borderColor: palette.border, backgroundColor: palette.surface }]}> 
+              <Text style={[styles.fieldLabel, typography.caption, { color: palette.textSecondary }]}>Fondo del estado</Text>
               <View style={styles.paletteRow}>
                 {TEXT_BG_COLORS.map((color) => (
                   <Pressable key={color} onPress={() => setBackgroundColor(color)} style={[styles.colorDot, { backgroundColor: color }, backgroundColor === color ? styles.colorDotActive : null]} />
                 ))}
               </View>
-            ) : null}
-          </View>
+            </View>
+          ) : null}
 
           <StatusActionBar
             actions={[
-              { key: 'camera', icon: 'camera-outline', label: 'Cámara', onPress: onTakePhoto },
-              { key: 'gallery', icon: 'image-outline', label: 'Galería', onPress: onPickImage },
+              { key: 'camera', icon: 'camera-outline', label: 'Cámara', onPress: () => pickImage('camera') },
+              { key: 'gallery', icon: 'image-outline', label: 'Galería', onPress: () => pickImage('library') },
               { key: 'location', icon: 'location-outline', label: 'Ubicación', onPress: onPickLocation },
               { key: 'audio', icon: isRecording ? 'stop-circle-outline' : 'mic-outline', label: isRecording ? 'Detener' : 'Audio', onPress: onRecordAudio, danger: isRecording },
             ]}
           />
 
           <View style={[styles.editorCard, { borderColor: palette.border, backgroundColor: palette.surface }]}> 
-            <Text style={[styles.fieldLabel, { color: palette.textSecondary }]}>Reacciones rápidas</Text>
+            <Text style={[styles.fieldLabel, typography.caption, { color: palette.textSecondary }]}>Reacciones rápidas</Text>
             <View style={styles.emojiRow}>
               {EMOJIS.map((emoji) => (
                 <Pressable key={emoji} style={[styles.emojiChip, { borderColor: palette.border, backgroundColor: pickedEmojis.includes(emoji) ? (isDark ? '#1E3A61' : '#EAF3FF') : 'transparent' }]} onPress={() => onToggleEmoji(emoji)}>
@@ -202,11 +218,12 @@ export default function CreateStatusScreen() {
             </View>
           </View>
 
-          {error ? <Text style={styles.error}>{error}</Text> : null}
+          {error ? <Text style={[styles.error, typography.caption]}>{error}</Text> : null}
 
-          <Pressable style={[styles.publishButton, { backgroundColor: palette.accent }, (!hasAnyContent || saving) ? styles.publishButtonDisabled : null]} disabled={saving || !hasAnyContent} onPress={onCreateStatus}>
-            {saving ? <ActivityIndicator color="#FFF" size="small" /> : <Text style={styles.publishText}>Publicar estado</Text>}
+          <Pressable style={[styles.publishButton, { backgroundColor: palette.accent }, (!hasAnyContent || saving || isRecording) ? styles.publishButtonDisabled : null]} disabled={saving || !hasAnyContent || isRecording} onPress={onCreateStatus}>
+            {saving ? <ActivityIndicator color="#FFF" size="small" /> : <Text style={[styles.publishText, typography.heading]}>Publicar estado</Text>}
           </Pressable>
+          {isRecording ? <Text style={[styles.recordingInfo, typography.caption, { color: '#D93025' }]}>Grabando audio… toca “Detener” para adjuntarlo.</Text> : null}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -217,20 +234,21 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   container: { flexGrow: 1, paddingHorizontal: 16, paddingTop: 12, gap: 12 },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  label: { fontSize: 24, fontWeight: '800' },
+  label: { fontSize: 28 },
+  subLabel: { fontSize: 13, marginTop: 2 },
   ghostAction: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
-  ghostActionText: { fontWeight: '700', fontSize: 13 },
+  ghostActionText: { fontSize: 13 },
   editorCard: { borderWidth: 1, borderRadius: 16, padding: 12, gap: 10 },
-  fieldLabel: { fontSize: 13, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 },
-  input: { minHeight: 110, borderWidth: 1, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15, textAlignVertical: 'top' },
+  fieldLabel: { fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.4 },
   paletteRow: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
   colorDot: { width: 30, height: 30, borderRadius: 15, borderWidth: 2, borderColor: '#FFFFFF55' },
   colorDotActive: { borderColor: '#FFFFFF', transform: [{ scale: 1.06 }] },
   emojiRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   emojiChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
   emojiText: { fontSize: 18 },
-  publishButton: { borderRadius: 12, alignItems: 'center', paddingVertical: 13, marginTop: 4 },
+  publishButton: { borderRadius: 14, alignItems: 'center', paddingVertical: 13, marginTop: 4 },
   publishButtonDisabled: { opacity: 0.55 },
-  publishText: { color: '#FFF', fontWeight: '800', fontSize: 15 },
-  error: { color: '#D93025', fontSize: 13, fontWeight: '600' },
+  publishText: { color: '#FFF', fontSize: 15 },
+  error: { color: '#D93025', fontSize: 13 },
+  recordingInfo: { fontSize: 12, textAlign: 'center' },
 });

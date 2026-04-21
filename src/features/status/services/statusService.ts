@@ -114,7 +114,7 @@ const detectStatusType = (input: CreateStatusInput): StatusKind => {
   return 'text';
 };
 
-const mapStatus = (id: string, data: Record<string, any>): StatusItem => {
+const mapStatus = (id: string, data: Record<string, unknown>): StatusItem => {
   const location = data.location as GeoPoint | undefined;
 
   return {
