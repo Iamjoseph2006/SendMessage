@@ -10,7 +10,7 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -38,6 +38,7 @@ import { useChat } from '@/src/features/chat/hooks/useChat';
 import { ChatLocation, ChatMessage, getChatById, listenChatById, markChatAsRead } from '@/src/features/chat/services/chatService';
 import { getUsers, UserProfile, getUsersByUids, listenUserById } from '@/src/features/users/services/userService';
 import { AppIconButton } from '@/src/presentation/components/ui/AppIconButton';
+import { UserAvatar } from '@/src/presentation/components/ui/UserAvatar';
 import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
 import { toSafeDate, toSafeMillis } from '@/src/shared/utils/date';
 
@@ -83,6 +84,10 @@ export default function ConversationScreen() {
   const hasInitialAutoScrollRef = useRef(false);
   const shouldAutoScrollOnSizeRef = useRef(true);
   const lastMessageIdRef = useRef<string | null>(null);
+  const layoutHeightRef = useRef(0);
+  const contentHeightRef = useRef(0);
+  const pendingInitialSyncRef = useRef(true);
+  const initialAutoScrollDoneRef = useRef(false);
 
   const {
     messages,
@@ -111,6 +116,7 @@ export default function ConversationScreen() {
   const [isRecording, setIsRecording] = useState(false);
   const [showAttachSheet, setShowAttachSheet] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [isListReady, setIsListReady] = useState(false);
   const [openAttachAfterKeyboardCloses, setOpenAttachAfterKeyboardCloses] = useState(false);
   const [inputHeight, setInputHeight] = useState(44);
   const [showContextMenu, setShowContextMenu] = useState(false);
@@ -127,23 +133,47 @@ export default function ConversationScreen() {
     [messages, user?.uid],
   );
 
-  const scrollToBottom = (animated = true) => {
+  const scrollToBottom = useCallback((animated = true) => {
     requestAnimationFrame(() => {
       listRef.current?.scrollToEnd({ animated });
     });
-  };
+  }, []);
+
+  const runInitialListSync = useCallback(() => {
+    if (!pendingInitialSyncRef.current || initialAutoScrollDoneRef.current) return;
+    if (layoutHeightRef.current <= 0 || contentHeightRef.current <= 0) return;
+
+    InteractionManager.runAfterInteractions(() => {
+      requestAnimationFrame(() => {
+        listRef.current?.scrollToEnd({ animated: false });
+        nearBottomRef.current = true;
+        shouldAutoScrollOnSizeRef.current = true;
+        hasInitialAutoScrollRef.current = true;
+        initialAutoScrollDoneRef.current = true;
+        pendingInitialSyncRef.current = false;
+        setIsListReady(true);
+      });
+    });
+  }, []);
 
   const onScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
     const distanceFromBottom = contentSize.height - (contentOffset.y + layoutMeasurement.height);
-    nearBottomRef.current = distanceFromBottom < 120;
+    const threshold = Math.max(96, inputHeight * 1.6);
+    nearBottomRef.current = distanceFromBottom < threshold;
   };
 
   useEffect(() => {
-    const handleKeyboardShow = (event: KeyboardEvent) => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const handleKeyboardShow = (_event: KeyboardEvent) => {
       setKeyboardVisible(true);
       setShowAttachSheet(false);
-      setTimeout(() => scrollToBottom(true), 16);
+      if (nearBottomRef.current) {
+        shouldAutoScrollOnSizeRef.current = true;
+        scrollToBottom(true);
+      }
     };
 
     const handleKeyboardHide = () => {
@@ -154,25 +184,24 @@ export default function ConversationScreen() {
       }
     };
 
-    const showSub = Keyboard.addListener('keyboardDidShow', handleKeyboardShow);
-    const hideSub = Keyboard.addListener('keyboardDidHide', handleKeyboardHide);
+    const showSub = Keyboard.addListener(showEvent, handleKeyboardShow);
+    const hideSub = Keyboard.addListener(hideEvent, handleKeyboardHide);
     return () => {
       showSub.remove();
       hideSub.remove();
     };
-  }, [openAttachAfterKeyboardCloses]);
+  }, [openAttachAfterKeyboardCloses, scrollToBottom]);
+
 
   useEffect(() => {
-    const interaction = InteractionManager.runAfterInteractions(() => {
-      if (!hasInitialAutoScrollRef.current && visibleMessages.length > 0) {
-        scrollToBottom(false);
-        hasInitialAutoScrollRef.current = true;
-      }
-    });
-    return () => interaction.cancel();
-  }, [visibleMessages.length]);
+    if (!visibleMessages.length) {
+      setIsListReady(true);
+      pendingInitialSyncRef.current = false;
+      return;
+    }
 
-  useEffect(() => {
+    runInitialListSync();
+
     const lastMessage = visibleMessages[visibleMessages.length - 1];
     if (!lastMessage) return;
     if (lastMessage.id === lastMessageIdRef.current) return;
@@ -183,7 +212,7 @@ export default function ConversationScreen() {
       scrollToBottom(true);
     }
     lastMessageIdRef.current = lastMessage.id;
-  }, [user?.uid, visibleMessages]);
+  }, [runInitialListSync, scrollToBottom, user?.uid, visibleMessages]);
 
   useEffect(() => {
     if (!chatId || !user?.uid) return;
@@ -475,13 +504,16 @@ export default function ConversationScreen() {
       <KeyboardAvoidingView
         enabled={Platform.OS === 'ios'}
         behavior="padding"
-        keyboardVerticalOffset={insets.top}
+        keyboardVerticalOffset={0}
         style={styles.safeArea}>
         <View style={[styles.header, { borderBottomColor: palette.border, backgroundColor: palette.surface }]}> 
           <AppIconButton iconName="chevron-back" onPress={() => router.back()} variant="soft" />
           <Pressable style={styles.headerTextWrap} onPress={() => router.push(`/chat/info/${chatId}`)}>
-            <Text style={[styles.headerName, { color: palette.textPrimary }]} numberOfLines={1}>{chatName}</Text>
-            <Text style={[styles.headerSubtitle, { color: contactProfile?.online ? '#14A44D' : palette.textSecondary }]} numberOfLines={1}>{availabilityLabel}</Text>
+            <UserAvatar uri={contactProfile?.photoURL} fallbackInitial={chatName} size={38} />
+            <View style={styles.headerMeta}>
+              <Text style={[styles.headerName, { color: palette.textPrimary }]} numberOfLines={1}>{chatName}</Text>
+              <Text style={[styles.headerSubtitle, { color: contactProfile?.online ? '#14A44D' : palette.textSecondary }]} numberOfLines={1}>{availabilityLabel}</Text>
+            </View>
           </Pressable>
           <AppIconButton iconName="videocam-outline" onPress={handleVideoCall} variant="soft" />
           <AppIconButton iconName="call-outline" onPress={handleVoiceCall} variant="soft" />
@@ -495,14 +527,20 @@ export default function ConversationScreen() {
           ref={listRef}
           data={visibleMessages}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={[styles.listContent, { paddingBottom: showAttachSheet ? 6 : 12 }]}
+          contentContainerStyle={[styles.listContent, { paddingBottom: showAttachSheet ? 8 : 14, opacity: isListReady ? 1 : 0 }]}
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           keyboardShouldPersistTaps="handled"
-          automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+          automaticallyAdjustKeyboardInsets={false}
           onScroll={onScroll}
           scrollEventThrottle={16}
-          onContentSizeChange={() => {
-            if (shouldAutoScrollOnSizeRef.current) {
+          onLayout={(event) => {
+            layoutHeightRef.current = event.nativeEvent.layout.height;
+            runInitialListSync();
+          }}
+          onContentSizeChange={(_w, height) => {
+            contentHeightRef.current = height;
+            runInitialListSync();
+            if (initialAutoScrollDoneRef.current && shouldAutoScrollOnSizeRef.current) {
               scrollToBottom(hasInitialAutoScrollRef.current);
             }
           }}
@@ -554,7 +592,7 @@ export default function ConversationScreen() {
           </View>
         ) : null}
 
-        <View style={[styles.composer, { borderTopColor: palette.border, backgroundColor: palette.surface, paddingBottom: keyboardVisible ? 8 : Math.max(8, insets.bottom) }]}>
+        <View style={[styles.composer, { borderTopColor: palette.border, backgroundColor: palette.surface, paddingBottom: Platform.OS === 'ios' ? Math.max(6, insets.bottom - 2) : Math.max(8, insets.bottom), }]}>
           <AppIconButton iconName="add" onPress={openAttachPicker} variant="soft" />
           <TextInput
             style={[
@@ -727,7 +765,8 @@ export default function ConversationScreen() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   header: { minHeight: 60, flexDirection: 'row', alignItems: 'center', gap: 4, borderBottomWidth: StyleSheet.hairlineWidth, paddingHorizontal: 10 },
-  headerTextWrap: { flex: 1, gap: 1 },
+  headerTextWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  headerMeta: { flex: 1, gap: 1 },
   headerName: { fontSize: 18, fontWeight: '700' },
   headerSubtitle: { fontSize: 12, fontWeight: '600' },
   loading: { marginTop: 12 },

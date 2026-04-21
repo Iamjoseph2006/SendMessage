@@ -6,9 +6,9 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAuth } from '@/src/features/auth/hooks/useAuth';
 import { StatusItem, listenStatuses } from '@/src/features/status/services/statusService';
 import { buildMyStatusSubtitle, getRelativeStatusTime, getStatusPreview } from '@/src/features/status/utils/statusFormat';
-import { getAvatarInitials } from '@/src/shared/utils/avatar';
 import { getUsersByUids } from '@/src/features/users/services/userService';
 import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
+import { UserAvatar } from '@/src/presentation/components/ui/UserAvatar';
 import { toSafeMillis } from '@/src/shared/utils/date';
 
 type ContactStatusGroup = {
@@ -25,6 +25,7 @@ export default function StatusScreen() {
   const palette = isDark ? darkPalette : lightPalette;
   const [statuses, setStatuses] = useState<StatusItem[]>([]);
   const [usersById, setUsersById] = useState<Record<string, string>>({});
+  const [userPhotoById, setUserPhotoById] = useState<Record<string, string | null>>({});
   const [error, setError] = useState<string | null>(null);
   const insets = useSafeAreaInsets();
 
@@ -42,8 +43,15 @@ export default function StatusScreen() {
               return acc;
             }, {}),
           );
+          setUserPhotoById(
+            users.reduce<Record<string, string | null>>((acc, item) => {
+              acc[item.uid] = item.photoURL ?? null;
+              return acc;
+            }, {}),
+          );
         } catch {
           setUsersById({});
+          setUserPhotoById({});
         }
       },
       (listenError) => setError(listenError.message),
@@ -88,9 +96,7 @@ export default function StatusScreen() {
           style={[styles.myStatusCard, { borderColor: palette.border, backgroundColor: palette.surface }]}
           onPress={() => router.push('/status/my')}>
           <View style={styles.avatarWrap}>
-            <View style={[styles.avatar, { backgroundColor: isDark ? '#253650' : '#EAF3FF' }]}>
-              <Text style={[styles.avatarText, { color: palette.accent }]}>{getAvatarInitials(user?.displayName ?? user?.email)}</Text>
-            </View>
+            <UserAvatar uri={user?.uid ? userPhotoById[user.uid] : null} fallbackInitial={user?.displayName ?? user?.email} size={52} />
             <View style={styles.addBadge}>
               <Ionicons name="add" size={14} color="#FFFFFF" />
             </View>
@@ -115,7 +121,9 @@ export default function StatusScreen() {
         {contactGroups.length ? (
           contactGroups.map((group) => (
             <Pressable key={group.userId} style={styles.row} onPress={() => router.push({ pathname: '/status/viewer', params: { userId: group.userId } })}>
-              <View style={[styles.storyRing, group.unreadCount ? styles.storyRingUnread : styles.storyRingRead]} />
+              <View style={[styles.storyRing, group.unreadCount ? styles.storyRingUnread : styles.storyRingRead]}>
+                <UserAvatar uri={userPhotoById[group.userId]} fallbackInitial={group.ownerName} size={40} />
+              </View>
               <View style={styles.statusTextWrap}>
                 <Text style={[styles.title, { color: palette.textPrimary }]}>{group.ownerName}</Text>
                 <Text style={[styles.subtitle, { color: palette.textSecondary }]}>
@@ -150,8 +158,6 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   avatarWrap: { position: 'relative' },
-  avatar: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontWeight: '800', fontSize: 20 },
   addBadge: {
     position: 'absolute',
     bottom: -1,
@@ -176,7 +182,7 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 13, fontWeight: '700', letterSpacing: 0.3, textTransform: 'uppercase' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   statusTextWrap: { flex: 1 },
-  storyRing: { width: 46, height: 46, borderRadius: 23, borderWidth: 3, backgroundColor: '#F5FAFF' },
+  storyRing: { width: 52, height: 52, borderRadius: 26, borderWidth: 3, backgroundColor: '#F5FAFF', alignItems: 'center', justifyContent: 'center' },
   storyRingUnread: { borderColor: '#1F7AE0' },
   storyRingRead: { borderColor: '#A9B9CA' },
   title: { color: '#22354D', fontWeight: '700', fontSize: 16 },
