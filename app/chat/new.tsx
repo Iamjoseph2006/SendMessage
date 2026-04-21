@@ -1,6 +1,6 @@
 import { Stack, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/features/auth/hooks/useAuth';
 import { createOrGetChat } from '@/src/features/chat/services/chatService';
@@ -14,6 +14,7 @@ export default function NewChatScreen() {
   const { isDark } = useAppTheme();
   const palette = isDark ? darkPalette : lightPalette;
   const router = useRouter();
+  const { width } = useWindowDimensions();
 
   const [startingChatWith, setStartingChatWith] = useState<string | null>(null);
   const [screenError, setScreenError] = useState<string | null>(null);
@@ -43,7 +44,7 @@ export default function NewChatScreen() {
       {screenError || error ? <Text style={styles.error}>{screenError ?? error}</Text> : null}
 
       <FlatList
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingHorizontal: Math.max(12, Math.min(20, width * 0.05)) }]}
         data={users}
         keyExtractor={(item) => item.uid}
         ListEmptyComponent={
@@ -61,7 +62,7 @@ export default function NewChatScreen() {
               style={[styles.row, { borderColor: palette.border, backgroundColor: palette.surface }]}
               disabled={startingChatWith === item.uid}
               onPress={() => openOrCreateChat(item.uid)}>
-              <View style={styles.avatar}>
+              <View style={[styles.avatar, { width: width < 360 ? 40 : 44, height: width < 360 ? 40 : 44, borderRadius: width < 360 ? 20 : 22 }]}>
                 <Text style={styles.avatarText}>{getAvatarInitials(displayName)}</Text>
               </View>
 

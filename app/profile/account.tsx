@@ -1,4 +1,3 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { Stack, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -6,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/features/auth/hooks/useAuth';
 import { listenProfile } from '@/src/features/profile/services/profileService';
 import { UserProfile } from '@/src/features/users/services/userService';
+import { AppIconButton } from '@/src/presentation/components/ui/AppIconButton';
 import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
 import { getAvatarInitials } from '@/src/shared/utils/avatar';
 
@@ -78,7 +78,7 @@ export default function AccountScreen() {
         </View>
 
         <Pressable style={styles.editButton} onPress={() => router.push('/profile/edit')}>
-          <Ionicons name="create-outline" size={18} color="#FFF" />
+          <AppIconButton iconName="create-outline" size={18} variant="solid" />
           <Text style={styles.editButtonText}>Editar perfil</Text>
         </Pressable>
       </ScrollView>

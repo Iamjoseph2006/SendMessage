@@ -1,4 +1,3 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -6,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/features/auth/hooks/useAuth';
 import { getChatById } from '@/src/features/chat/services/chatService';
 import { UserProfile, getUserById } from '@/src/features/users/services/userService';
+import { AppIconButton } from '@/src/presentation/components/ui/AppIconButton';
 import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
 import { getAvatarInitials } from '@/src/shared/utils/avatar';
 
@@ -78,7 +78,7 @@ export default function ChatContactInfoScreen() {
         </View>
 
         <Pressable style={styles.chatButton} onPress={() => router.replace(`/chat/${chatId}`)}>
-          <Ionicons name="chatbubble-ellipses-outline" size={18} color="#FFF" />
+          <AppIconButton iconName="chatbubble-ellipses-outline" size={18} variant="solid" />
           <Text style={styles.chatButtonText}>Volver al chat</Text>
         </Pressable>
       </ScrollView>

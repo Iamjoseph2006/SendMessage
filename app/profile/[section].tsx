@@ -4,6 +4,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { AppIconButton } from '@/src/presentation/components/ui/AppIconButton';
 import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
 
 type OptionItem = {
@@ -164,9 +165,7 @@ export default function ProfileSectionScreen() {
                 trackColor={{ true: palette.accent, false: '#5B6980' }}
               />
             ) : (
-              <Pressable style={styles.actionButton} onPress={item.onPress}>
-                <Ionicons name="chevron-forward" size={18} color={palette.textSecondary} />
-              </Pressable>
+              <AppIconButton iconName="chevron-forward" size={16} variant="soft" onPress={item.onPress} />
             )}
           </View>
         ))}
@@ -204,13 +203,6 @@ const styles = StyleSheet.create({
   rowInfo: { flex: 1 },
   rowText: { fontSize: 15, fontWeight: '700' },
   rowSubtext: { fontSize: 12, marginTop: 2 },
-  actionButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   backButton: {
     marginTop: 10,
     borderWidth: 1,
