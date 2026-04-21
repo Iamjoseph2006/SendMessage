@@ -1,5 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Tabs } from 'expo-router';
+import { View } from 'react-native';
 import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
 
 export default function TabLayout() {
@@ -24,34 +25,33 @@ export default function TabLayout() {
         },
         headerShown: false,
       }}>
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Chats',
-          tabBarIcon: ({ color }) => <Ionicons size={24} name="chatbubble-ellipses" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="calls"
-        options={{
-          title: 'Llamadas',
-          tabBarIcon: ({ color }) => <Ionicons size={24} name="call" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="status"
-        options={{
-          title: 'Estados',
-          tabBarIcon: ({ color }) => <Ionicons size={24} name="radio" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: 'Perfil',
-          tabBarIcon: ({ color }) => <Ionicons size={24} name="person" color={color} />,
-        }}
-      />
+      {[
+        { name: 'index', title: 'Chats', icon: 'chatbubble-ellipses' },
+        { name: 'calls', title: 'Llamadas', icon: 'call' },
+        { name: 'status', title: 'Estados', icon: 'radio' },
+        { name: 'profile', title: 'Perfil', icon: 'person' },
+      ].map((tab) => (
+        <Tabs.Screen
+          key={tab.name}
+          name={tab.name}
+          options={{
+            title: tab.title,
+            tabBarIcon: ({ color, focused }) => (
+              <View
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 16,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: focused ? (isDark ? '#223956' : '#E8F2FF') : 'transparent',
+                }}>
+                <Ionicons size={20} name={tab.icon as any} color={color} />
+              </View>
+            ),
+          }}
+        />
+      ))}
     </Tabs>
   );
 }

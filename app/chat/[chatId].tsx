@@ -26,6 +26,10 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  InteractionManager,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -33,6 +37,7 @@ import { useAuth } from '@/src/features/auth/hooks/useAuth';
 import { useChat } from '@/src/features/chat/hooks/useChat';
 import { ChatLocation, ChatMessage, getChatById, listenChatById, markChatAsRead } from '@/src/features/chat/services/chatService';
 import { getUsers, UserProfile, getUsersByUids, listenUserById } from '@/src/features/users/services/userService';
+import { AppIconButton } from '@/src/presentation/components/ui/AppIconButton';
 import { darkPalette, lightPalette, useAppTheme } from '@/src/presentation/theme/appTheme';
 import { toSafeDate, toSafeMillis } from '@/src/shared/utils/date';
 
@@ -72,7 +77,12 @@ export default function ConversationScreen() {
   const palette = isDark ? darkPalette : lightPalette;
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const listRef = useRef<FlatList<ChatMessage>>(null);
+  const nearBottomRef = useRef(true);
+  const hasInitialAutoScrollRef = useRef(false);
+  const shouldAutoScrollOnSizeRef = useRef(true);
+  const lastMessageIdRef = useRef<string | null>(null);
 
   const {
     messages,
@@ -101,7 +111,6 @@ export default function ConversationScreen() {
   const [isRecording, setIsRecording] = useState(false);
   const [showAttachSheet, setShowAttachSheet] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [openAttachAfterKeyboardCloses, setOpenAttachAfterKeyboardCloses] = useState(false);
   const [inputHeight, setInputHeight] = useState(44);
   const [showContextMenu, setShowContextMenu] = useState(false);
@@ -118,23 +127,27 @@ export default function ConversationScreen() {
     [messages, user?.uid],
   );
 
-  useEffect(() => {
+  const scrollToBottom = (animated = true) => {
     requestAnimationFrame(() => {
-      listRef.current?.scrollToEnd({ animated: true });
+      listRef.current?.scrollToEnd({ animated });
     });
-  }, [visibleMessages.length]);
+  };
+
+  const onScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    const distanceFromBottom = contentSize.height - (contentOffset.y + layoutMeasurement.height);
+    nearBottomRef.current = distanceFromBottom < 120;
+  };
 
   useEffect(() => {
     const handleKeyboardShow = (event: KeyboardEvent) => {
       setKeyboardVisible(true);
-      setKeyboardHeight(event.endCoordinates?.height ?? 0);
       setShowAttachSheet(false);
-      listRef.current?.scrollToEnd({ animated: true });
+      setTimeout(() => scrollToBottom(true), 16);
     };
 
     const handleKeyboardHide = () => {
       setKeyboardVisible(false);
-      setKeyboardHeight(0);
       if (openAttachAfterKeyboardCloses) {
         setShowAttachSheet(true);
         setOpenAttachAfterKeyboardCloses(false);
@@ -148,6 +161,29 @@ export default function ConversationScreen() {
       hideSub.remove();
     };
   }, [openAttachAfterKeyboardCloses]);
+
+  useEffect(() => {
+    const interaction = InteractionManager.runAfterInteractions(() => {
+      if (!hasInitialAutoScrollRef.current && visibleMessages.length > 0) {
+        scrollToBottom(false);
+        hasInitialAutoScrollRef.current = true;
+      }
+    });
+    return () => interaction.cancel();
+  }, [visibleMessages.length]);
+
+  useEffect(() => {
+    const lastMessage = visibleMessages[visibleMessages.length - 1];
+    if (!lastMessage) return;
+    if (lastMessage.id === lastMessageIdRef.current) return;
+
+    const isOwnMessage = lastMessage.senderId === user?.uid;
+    shouldAutoScrollOnSizeRef.current = isOwnMessage || nearBottomRef.current || !hasInitialAutoScrollRef.current;
+    if (shouldAutoScrollOnSizeRef.current) {
+      scrollToBottom(true);
+    }
+    lastMessageIdRef.current = lastMessage.id;
+  }, [user?.uid, visibleMessages]);
 
   useEffect(() => {
     if (!chatId || !user?.uid) return;
@@ -430,42 +466,26 @@ export default function ConversationScreen() {
     return <Ionicons name="checkmark" size={12} color="#DDEBFF" />;
   };
 
-  const attachPanelHeight = Math.max(220, keyboardHeight || 0);
+  const attachPanelHeight = Math.max(220, Math.min(320, width * 0.55));
+  const bubbleMaxWidth = Math.min(420, width * 0.8);
+  const sheetItemWidth = Math.min(96, width * 0.2);
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={[styles.safeArea, { backgroundColor: palette.background }]}>
       <KeyboardAvoidingView
         enabled={Platform.OS === 'ios'}
         behavior="padding"
-        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 8 : 0}
+        keyboardVerticalOffset={insets.top}
         style={styles.safeArea}>
         <View style={[styles.header, { borderBottomColor: palette.border, backgroundColor: palette.surface }]}> 
-          <Pressable onPress={() => router.back()} style={styles.backButton}>
-            <Ionicons name="chevron-back" size={22} color={palette.textPrimary} />
-          </Pressable>
+          <AppIconButton iconName="chevron-back" onPress={() => router.back()} variant="soft" />
           <Pressable style={styles.headerTextWrap} onPress={() => router.push(`/chat/info/${chatId}`)}>
             <Text style={[styles.headerName, { color: palette.textPrimary }]} numberOfLines={1}>{chatName}</Text>
             <Text style={[styles.headerSubtitle, { color: contactProfile?.online ? '#14A44D' : palette.textSecondary }]} numberOfLines={1}>{availabilityLabel}</Text>
           </Pressable>
-          <Pressable
-            onPress={handleVideoCall}
-            style={[
-              styles.cleanHeaderAction,
-              { backgroundColor: isDark ? '#253140' : '#EAF2FF', borderWidth: isDark ? 0 : 1, borderColor: isDark ? 'transparent' : '#D6E4FF' },
-            ]}>
-            <Ionicons name="videocam-outline" size={20} color={isDark ? '#BFD9FF' : '#1B67C9'} />
-          </Pressable>
-          <Pressable
-            onPress={handleVoiceCall}
-            style={[
-              styles.cleanHeaderAction,
-              { backgroundColor: isDark ? '#253140' : '#EAF2FF', borderWidth: isDark ? 0 : 1, borderColor: isDark ? 'transparent' : '#D6E4FF' },
-            ]}>
-            <Ionicons name="call-outline" size={18} color={isDark ? '#BFD9FF' : '#1B67C9'} />
-          </Pressable>
-          <Pressable onPress={() => router.push(`/chat/info/${chatId}`)} style={styles.cleanHeaderAction}>
-            <Ionicons name="information-circle-outline" size={21} color={palette.textSecondary} />
-          </Pressable>
+          <AppIconButton iconName="videocam-outline" onPress={handleVideoCall} variant="soft" />
+          <AppIconButton iconName="call-outline" onPress={handleVoiceCall} variant="soft" />
+          <AppIconButton iconName="information-circle-outline" onPress={() => router.push(`/chat/info/${chatId}`)} variant="ghost" />
         </View>
 
         {loading ? <ActivityIndicator style={styles.loading} size="large" /> : null}
@@ -478,7 +498,14 @@ export default function ConversationScreen() {
           contentContainerStyle={[styles.listContent, { paddingBottom: showAttachSheet ? 6 : 12 }]}
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           keyboardShouldPersistTaps="handled"
-          onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
+          automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
+          onContentSizeChange={() => {
+            if (shouldAutoScrollOnSizeRef.current) {
+              scrollToBottom(hasInitialAutoScrollRef.current);
+            }
+          }}
           renderItem={({ item }) => {
             const isMe = item.senderId === user?.uid;
             const locationLink = item.location ? `https://maps.google.com/?q=${item.location.latitude},${item.location.longitude}` : '';
@@ -486,7 +513,7 @@ export default function ConversationScreen() {
             const bubbleTextColor = isMe ? '#FFFFFF' : isDark ? '#F3F6FC' : '#1A2430';
 
             return (
-              <Pressable onLongPress={() => openContext(item)} style={[styles.bubble, isMe ? styles.me : styles.contact, { backgroundColor: bubbleBackground }]}> 
+              <Pressable onLongPress={() => openContext(item)} style={[styles.bubble, isMe ? styles.me : styles.contact, { backgroundColor: bubbleBackground, maxWidth: bubbleMaxWidth }]}>
                 {item.replyTo ? (
                   <View style={[styles.replyWrap, { borderLeftColor: isMe ? '#D7E8FF' : '#5B8AC5' }]}>
                     <Text style={[styles.replyAuthor, { color: isMe ? '#EAF4FF' : isDark ? '#CFD8E8' : '#315A87' }]} numberOfLines={1}>
@@ -527,8 +554,8 @@ export default function ConversationScreen() {
           </View>
         ) : null}
 
-        <View style={[styles.composer, { borderTopColor: palette.border, backgroundColor: palette.surface, paddingBottom: Platform.OS === 'ios' ? Math.max(6, insets.bottom) : 8 }]}>
-          <Pressable style={styles.attachButton} onPress={openAttachPicker}><Ionicons name="add" size={20} color={palette.textPrimary} /></Pressable>
+        <View style={[styles.composer, { borderTopColor: palette.border, backgroundColor: palette.surface, paddingBottom: keyboardVisible ? 8 : Math.max(8, insets.bottom) }]}>
+          <AppIconButton iconName="add" onPress={openAttachPicker} variant="soft" />
           <TextInput
             style={[
               styles.input,
@@ -553,11 +580,21 @@ export default function ConversationScreen() {
             onFocus={() => {
               setShowAttachSheet(false);
               setOpenAttachAfterKeyboardCloses(false);
-              listRef.current?.scrollToEnd({ animated: true });
+              shouldAutoScrollOnSizeRef.current = true;
+              scrollToBottom(true);
             }}
           />
-          <Pressable style={[styles.audioAction, isRecording ? styles.audioActionRecording : null]} onPress={onAudioPress}><Ionicons name={isRecording ? 'stop' : 'mic'} size={16} color="#FFF" /></Pressable>
-          <Pressable style={[styles.sendButton, !canSend && styles.sendButtonDisabled]} disabled={!canSend} onPress={sendText}><Ionicons name="send" size={16} color="#FFF" /></Pressable>
+          <AppIconButton iconName={isRecording ? 'stop' : 'mic'} variant="solid" onPress={onAudioPress} style={isRecording ? styles.audioActionRecording : undefined} />
+          <AppIconButton
+            iconName="send"
+            variant="solid"
+            disabled={!canSend}
+            onPress={async () => {
+              await sendText();
+              shouldAutoScrollOnSizeRef.current = true;
+              scrollToBottom(true);
+            }}
+          />
         </View>
         {showAttachSheet ? (
           <View
@@ -576,9 +613,9 @@ export default function ConversationScreen() {
               { icon: 'location', label: 'Ubicación', onPress: handleLocation },
               { icon: 'person', label: 'Contacto', onPress: handleShareContact },
             ].map((action) => (
-              <Pressable key={action.label} style={styles.sheetItem} onPress={action.onPress}>
+              <Pressable key={action.label} style={[styles.sheetItem, { width: sheetItemWidth }]} onPress={action.onPress}>
                 <View style={[styles.sheetIconCircle, { backgroundColor: palette.background, borderColor: palette.border }]}>
-                  <Ionicons name={action.icon as any} size={22} color={palette.textPrimary} />
+                  <Ionicons name={action.icon as any} size={20} color={palette.accent} />
                 </View>
                 <Text style={[styles.sheetLabel, { color: palette.textPrimary }]}>{action.label}</Text>
               </Pressable>
@@ -690,9 +727,7 @@ export default function ConversationScreen() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   header: { minHeight: 60, flexDirection: 'row', alignItems: 'center', gap: 4, borderBottomWidth: StyleSheet.hairlineWidth, paddingHorizontal: 10 },
-  backButton: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   headerTextWrap: { flex: 1, gap: 1 },
-  cleanHeaderAction: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
   headerName: { fontSize: 18, fontWeight: '700' },
   headerSubtitle: { fontSize: 12, fontWeight: '600' },
   loading: { marginTop: 12 },
@@ -721,12 +756,8 @@ const styles = StyleSheet.create({
   replyingAuthor: { fontSize: 12, fontWeight: '700' },
   replyingLabel: { flex: 1, fontSize: 12 },
   composer: { borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: 10, paddingTop: 8, flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
-  attachButton: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  audioAction: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#0A84FF', alignItems: 'center', justifyContent: 'center' },
   audioActionRecording: { backgroundColor: '#D93025' },
   input: { flex: 1, minHeight: 44, maxHeight: 120, borderWidth: 1, borderRadius: 20, paddingHorizontal: 14, paddingTop: 11, paddingBottom: 10, fontSize: 15, lineHeight: 20 },
-  sendButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#0A84FF', alignItems: 'center', justifyContent: 'center' },
-  sendButtonDisabled: { opacity: 0.5 },
   empty: { textAlign: 'center', marginTop: 22 },
   error: { color: '#D93025', marginHorizontal: 12, marginTop: 8 },
   inlineAttachPanel: { borderTopWidth: StyleSheet.hairlineWidth, borderTopLeftRadius: 18, borderTopRightRadius: 18, paddingTop: 16, paddingHorizontal: 18, flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
