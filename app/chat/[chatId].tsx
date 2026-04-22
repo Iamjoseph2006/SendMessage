@@ -9,7 +9,7 @@ import {
 } from 'expo-audio';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import * as FileSystem from 'expo-file-system';
+import { File as ExpoFile } from 'expo-file-system';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -45,6 +45,13 @@ import { typography } from '@/src/presentation/theme/typography';
 import { toSafeDate, toSafeMillis } from '@/src/shared/utils/date';
 
 const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+const isValidLocalUri = (uri: string) => /^(file|content|ph):\/\//.test(uri);
+
+const validateLocalMediaUri = (uri: string) => {
+  if (!isValidLocalUri(uri)) return false;
+  const file = new ExpoFile(uri);
+  return Boolean(file.exists && file.type === 'file' && typeof file.size === 'number' && file.size > 0 && file.uri);
+};
 
 function AudioBubble({ uri, isMe }: { uri: string; isMe: boolean }) {
   const player = useAudioPlayer(uri || undefined);
@@ -339,8 +346,7 @@ export default function ConversationScreen() {
         Alert.alert('Imagen', 'No se pudo leer la imagen seleccionada.');
         return;
       }
-      const info = await FileSystem.getInfoAsync(uri);
-      if (!info.exists) {
+      if (!validateLocalMediaUri(uri)) {
         Alert.alert('Imagen', 'La imagen seleccionada ya no está disponible en el dispositivo.');
         return;
       }
@@ -372,8 +378,7 @@ export default function ConversationScreen() {
         Alert.alert('Cámara', 'No se pudo obtener la foto capturada.');
         return;
       }
-      const info = await FileSystem.getInfoAsync(uri);
-      if (!info.exists) {
+      if (!validateLocalMediaUri(uri)) {
         Alert.alert('Cámara', 'La foto capturada no está disponible para enviarse.');
         return;
       }
@@ -424,8 +429,7 @@ export default function ConversationScreen() {
         await recorder.stop();
         const draftUri = recorder.uri ?? null;
         if (draftUri) {
-          const info = await FileSystem.getInfoAsync(draftUri);
-          if (info.exists) {
+          if (validateLocalMediaUri(draftUri)) {
             setRecordingDraftUri(draftUri);
             setDraftPlaybackUri(draftUri);
           } else {

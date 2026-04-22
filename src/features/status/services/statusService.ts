@@ -17,6 +17,7 @@ import {
   updateDoc,
   where,
 } from 'firebase/firestore';
+import { File as ExpoFile } from 'expo-file-system';
 import { FirebaseStorage, getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage';
 import { app, db } from '@/src/config/firebase';
 import { DateInput, toSafeMillis } from '@/src/shared/utils/date';
@@ -94,6 +95,12 @@ const mapFirestoreError = (error: unknown): Error => {
 const isMissingIndexError = (error: unknown) => (error as Partial<FirestoreError>)?.code === 'failed-precondition';
 
 const uploadStatusMedia = async (userId: string, uri: string, kind: 'image' | 'audio') => {
+  const file = new ExpoFile(uri);
+  const isLocalUri = /^(file|content|ph):\/\//.test(uri);
+  if (!isLocalUri || !file.uri || !file.exists || file.type !== 'file' || typeof file.size !== 'number' || file.size <= 0) {
+    throw new Error('El archivo del estado no es válido o ya no existe en el dispositivo.');
+  }
+
   const storage = getStorageInstance();
   const response = await fetch(uri);
   if (!response.ok) {
