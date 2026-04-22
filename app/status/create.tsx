@@ -9,7 +9,7 @@ import {
 } from 'expo-audio';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import * as FileSystem from 'expo-file-system';
+import { File as ExpoFile } from 'expo-file-system';
 import { Stack, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -35,6 +35,13 @@ import { typography } from '@/src/presentation/theme/typography';
 const EMOJIS = ['😀', '😂', '😍', '🔥', '🙏', '💙', '🎉', '😎'];
 const TEXT_BG_COLORS = ['#1F7AE0', '#3F8C5A', '#8A4FFF', '#C96200', '#29323D', '#BE2F6B'];
 const SAVE_TIMEOUT_MS = 15000;
+const isValidLocalUri = (uri: string) => /^(file|content|ph):\/\//.test(uri);
+
+const validateLocalMediaUri = (uri: string) => {
+  if (!isValidLocalUri(uri)) return false;
+  const file = new ExpoFile(uri);
+  return Boolean(file.exists && file.type === 'file' && typeof file.size === 'number' && file.size > 0 && file.uri);
+};
 
 export default function CreateStatusScreen() {
   const { user } = useAuth();
@@ -87,8 +94,7 @@ export default function CreateStatusScreen() {
         setError('No se pudo obtener la imagen.');
         return;
       }
-      const info = await FileSystem.getInfoAsync(uri);
-      if (!info.exists) {
+      if (!validateLocalMediaUri(uri)) {
         setError('El archivo seleccionado ya no está disponible.');
         return;
       }
@@ -115,8 +121,11 @@ export default function CreateStatusScreen() {
     if (isRecording) {
       await recorder.stop();
       if (recorder.uri) {
-        const info = await FileSystem.getInfoAsync(recorder.uri);
-        if (info.exists) setAudioUri(recorder.uri);
+        if (validateLocalMediaUri(recorder.uri)) {
+          setAudioUri(recorder.uri);
+        } else {
+          setError('El audio grabado no es válido o ya no está disponible.');
+        }
       }
       setIsRecording(false);
       await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
