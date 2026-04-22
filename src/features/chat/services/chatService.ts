@@ -38,7 +38,7 @@ export type Chat = {
   lastReadAtByUser?: Record<string, DateInput>;
 };
 
-export type ChatMessageType = 'text' | 'image' | 'audio' | 'location';
+export type ChatMessageType = 'text' | 'image' | 'audio' | 'location' | 'contact';
 
 export type ChatLocation = {
   latitude: number;
@@ -56,6 +56,7 @@ export type ChatMessage = {
   mediaUrl?: string | null;
   audioUrl?: string | null;
   location?: ChatLocation | null;
+  contact?: ChatContact | null;
   replyTo?: Pick<ChatMessage, 'id' | 'senderId' | 'text' | 'type'> | null;
   forwardedFrom?: string | null;
   editedAt?: DateInput;
@@ -74,8 +75,17 @@ export type SendMessageInput = {
   mediaUrl?: string | null;
   audioUrl?: string | null;
   location?: ChatLocation | null;
+  contact?: ChatContact | null;
   replyTo?: Pick<ChatMessage, 'id' | 'senderId' | 'text' | 'type'> | null;
   forwardedFrom?: string | null;
+};
+
+export type ChatContact = {
+  name: string;
+  phone?: string | null;
+  email?: string | null;
+  avatarUrl?: string | null;
+  userId?: string | null;
 };
 
 const requireDb = () => {
@@ -138,6 +148,10 @@ const buildMessagePreview = (input: SendMessageInput): string => {
     return '📍 Ubicación';
   }
 
+  if (input.type === 'contact') {
+    return input.contact?.name ? `👤 ${input.contact.name}` : '👤 Contacto';
+  }
+
   return input.text?.trim() ?? '';
 };
 
@@ -168,6 +182,7 @@ const mapMessage = (id: string, data: Record<string, unknown>): ChatMessage => (
   mediaUrl: (data.mediaUrl as string | undefined) ?? null,
   audioUrl: (data.audioUrl as string | undefined) ?? null,
   location: (data.location as ChatLocation | undefined) ?? null,
+  contact: (data.contact as ChatContact | undefined) ?? null,
   replyTo: (data.replyTo as ChatMessage['replyTo']) ?? null,
   forwardedFrom: (data.forwardedFrom as string | undefined) ?? null,
   editedAt: (data.editedAt as DateInput | undefined) ?? null,
@@ -312,7 +327,7 @@ export const sendMessagePayload = async (chatId: string, input: SendMessageInput
   }
 
   const hasPayload = Boolean(
-    normalizedText || input.mediaUrl || input.audioUrl || input.location || type === 'location' || type === 'audio' || type === 'image',
+    normalizedText || input.mediaUrl || input.audioUrl || input.location || input.contact || type === 'location' || type === 'audio' || type === 'image' || type === 'contact',
   );
 
   if (!hasPayload) {
@@ -368,6 +383,7 @@ export const sendMessagePayload = async (chatId: string, input: SendMessageInput
       mediaUrl: input.mediaUrl ?? null,
       audioUrl: input.audioUrl ?? null,
       location: input.location ?? null,
+      contact: input.contact ?? null,
       replyTo: input.replyTo ?? null,
       forwardedFrom: input.forwardedFrom ?? null,
       editedAt: null,

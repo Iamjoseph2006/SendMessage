@@ -3,6 +3,7 @@ import {
   ChatLocation,
   ChatMessage,
   ChatMessageType,
+  ChatContact,
   deleteMessageForEveryone,
   deleteMessageForMe,
   editMessage,
@@ -32,6 +33,7 @@ type UseChatResult = {
   sendImage: (localUri: string, caption?: string) => Promise<void>;
   sendAudio: (localUri: string) => Promise<void>;
   sendLocation: (location: ChatLocation) => Promise<void>;
+  sendContact: (contact: ChatContact) => Promise<void>;
   forwardMessage: (message: ChatMessage) => Promise<void>;
   editOwnMessage: (messageId: string, text: string) => Promise<void>;
   deleteForMe: (messageId: string) => Promise<void>;
@@ -97,7 +99,7 @@ export const useChat = (chatId: string | null, senderId: string | null): UseChat
 
   const canSend = useMemo(() => Boolean(chatId && senderId && input.trim().length > 0), [chatId, input, senderId]);
 
-  const sendWithType = async (payload: { text?: string; type: ChatMessageType; mediaUrl?: string | null; audioUrl?: string | null; location?: ChatLocation | null }) => {
+  const sendWithType = async (payload: { text?: string; type: ChatMessageType; mediaUrl?: string | null; audioUrl?: string | null; location?: ChatLocation | null; contact?: ChatContact | null }) => {
     if (!chatId || !senderId) {
       return;
     }
@@ -112,6 +114,7 @@ export const useChat = (chatId: string | null, senderId: string | null): UseChat
         mediaUrl: payload.mediaUrl,
         audioUrl: payload.audioUrl,
         location: payload.location,
+        contact: payload.contact,
         replyTo: replyingTo
           ? {
               id: replyingTo.id,
@@ -195,6 +198,10 @@ export const useChat = (chatId: string | null, senderId: string | null): UseChat
     await sendWithType({ type: 'location', location });
   };
 
+  const sendContact = async (contact: ChatContact) => {
+    await sendWithType({ type: 'contact', contact, text: contact.name });
+  };
+
   const forwardMessage = async (message: ChatMessage) => {
     if (!chatId || !senderId) {
       return;
@@ -208,6 +215,7 @@ export const useChat = (chatId: string | null, senderId: string | null): UseChat
         mediaUrl: message.mediaUrl,
         audioUrl: message.audioUrl,
         location: message.location,
+        contact: message.contact,
         forwardedFrom: message.senderId,
       });
     } catch (sendError) {
@@ -304,6 +312,7 @@ export const useChat = (chatId: string | null, senderId: string | null): UseChat
     sendImage,
     sendAudio,
     sendLocation,
+    sendContact,
     forwardMessage,
     editOwnMessage,
     deleteForMe,
