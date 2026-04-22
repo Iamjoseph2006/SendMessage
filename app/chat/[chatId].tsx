@@ -9,6 +9,7 @@ import {
 } from 'expo-audio';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
+import * as FileSystem from 'expo-file-system';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -59,10 +60,13 @@ function AudioBubble({ uri, isMe }: { uri: string; isMe: boolean }) {
   );
 }
 
+const formatDuration = (seconds: number) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+
 const getMessagePreview = (message: Pick<ChatMessage, 'type' | 'text'>) => {
   if (message.type === 'image') return 'Imagen';
   if (message.type === 'audio') return 'Audio';
   if (message.type === 'location') return 'Ubicación';
+  if (message.type === 'contact') return 'Contacto';
   return message.text || 'Mensaje';
 };
 
@@ -99,6 +103,7 @@ export default function ConversationScreen() {
     sendImage,
     sendAudio,
     sendLocation,
+    sendContact,
     forwardMessage,
     editOwnMessage,
     deleteForMe,
@@ -119,6 +124,7 @@ export default function ConversationScreen() {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDraftUri, setRecordingDraftUri] = useState<string | null>(null);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [draftPlaybackUri, setDraftPlaybackUri] = useState<string | null>(null);
   const [isProcessingRecording, setIsProcessingRecording] = useState(false);
   const [showAttachSheet, setShowAttachSheet] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
@@ -133,6 +139,8 @@ export default function ConversationScreen() {
   const [editDraft, setEditDraft] = useState('');
   const [chatReadMap, setChatReadMap] = useState<Record<string, ChatMessage['createdAt']>>({});
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const draftPlayer = useAudioPlayer(draftPlaybackUri || undefined);
+  const draftPlayerStatus = useAudioPlayerStatus(draftPlayer);
 
   const visibleMessages = useMemo(
     () => messages.filter((message) => !message.deletedFor?.includes(user?.uid ?? '')),
@@ -282,6 +290,7 @@ export default function ConversationScreen() {
 
   useEffect(() => () => {
     recorder.stop().catch(() => undefined);
+    setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(() => undefined);
   }, [recorder]);
 
   useEffect(() => {
@@ -330,6 +339,11 @@ export default function ConversationScreen() {
         Alert.alert('Imagen', 'No se pudo leer la imagen seleccionada.');
         return;
       }
+      const info = await FileSystem.getInfoAsync(uri);
+      if (!info.exists) {
+        Alert.alert('Imagen', 'La imagen seleccionada ya no está disponible en el dispositivo.');
+        return;
+      }
       await sendImage(uri);
     } catch (pickError) {
       const message = pickError instanceof Error ? pickError.message : 'No se pudo seleccionar la imagen.';
@@ -358,6 +372,11 @@ export default function ConversationScreen() {
         Alert.alert('Cámara', 'No se pudo obtener la foto capturada.');
         return;
       }
+      const info = await FileSystem.getInfoAsync(uri);
+      if (!info.exists) {
+        Alert.alert('Cámara', 'La foto capturada no está disponible para enviarse.');
+        return;
+      }
       await sendImage(uri);
     } catch (cameraError) {
       const message = cameraError instanceof Error ? cameraError.message : 'No se pudo abrir la cámara.';
@@ -374,7 +393,11 @@ export default function ConversationScreen() {
     }
 
     const current = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-    const location: ChatLocation = { latitude: current.coords.latitude, longitude: current.coords.longitude };
+    const location: ChatLocation = {
+      latitude: current.coords.latitude,
+      longitude: current.coords.longitude,
+      label: 'Ubicación en tiempo real',
+    };
     await sendLocation(location);
   };
 
@@ -385,7 +408,13 @@ export default function ConversationScreen() {
     }
     setShowAttachSheet(false);
     const first = contacts[0];
-    await setInput(`👤 Contacto: ${first.name || first.email} (${first.email})`);
+    await sendContact({
+      name: first.name || first.email || 'Contacto',
+      phone: (first as UserProfile & { phone?: string }).phone ?? null,
+      email: first.email ?? null,
+      avatarUrl: first.photoURL ?? null,
+      userId: first.uid,
+    });
   };
 
   const onAudioPress = async () => {
@@ -393,9 +422,19 @@ export default function ConversationScreen() {
       if (isRecording) {
         setIsProcessingRecording(true);
         await recorder.stop();
-        setRecordingDraftUri(recorder.uri ?? null);
+        const draftUri = recorder.uri ?? null;
+        if (draftUri) {
+          const info = await FileSystem.getInfoAsync(draftUri);
+          if (info.exists) {
+            setRecordingDraftUri(draftUri);
+            setDraftPlaybackUri(draftUri);
+          } else {
+            Alert.alert('Audio', 'El audio grabado no está disponible para enviarse.');
+          }
+        }
         setIsRecording(false);
         setIsProcessingRecording(false);
+        await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
         return;
       }
 
@@ -409,6 +448,7 @@ export default function ConversationScreen() {
       await recorder.prepareToRecordAsync();
       recorder.record();
       setRecordingDraftUri(null);
+      setDraftPlaybackUri(null);
       setRecordingSeconds(0);
       setIsRecording(true);
     } catch (audioError) {
@@ -564,7 +604,6 @@ export default function ConversationScreen() {
           }}
           renderItem={({ item }) => {
             const isMe = item.senderId === user?.uid;
-            const locationLink = item.location ? `https://maps.google.com/?q=${item.location.latitude},${item.location.longitude}` : '';
             const bubbleBackground = isMe ? '#0A84FF' : isDark ? '#2A2C32' : '#F1F2F6';
             const bubbleTextColor = isMe ? '#FFFFFF' : isDark ? '#F3F6FC' : '#1A2430';
 
@@ -584,11 +623,23 @@ export default function ConversationScreen() {
                 {item.type === 'image' && item.mediaUrl ? <Image source={{ uri: item.mediaUrl }} style={styles.image} /> : null}
                 {item.type === 'audio' && item.audioUrl ? <AudioBubble uri={item.audioUrl} isMe={isMe} /> : null}
                 {item.type === 'location' && item.location ? (
-                  <Pressable onPress={() => Linking.openURL(locationLink)}>
-                    <Text style={[styles.locationText, { color: isMe ? '#E7F2FF' : isDark ? '#9CCBFF' : '#0E5FB4' }]}>📍 Ver ubicación</Text>
+                  <Pressable onPress={() => router.push({ pathname: '/chat/location', params: { latitude: String(item.location.latitude), longitude: String(item.location.longitude), label: item.location.label ?? '' } })} style={[styles.locationCard, { backgroundColor: isMe ? '#1072D6' : isDark ? '#1E2530' : '#EAF2FF' }]}>
+                    <Image source={{ uri: `https://staticmap.openstreetmap.de/staticmap.php?center=${item.location.latitude},${item.location.longitude}&zoom=14&size=380x170&markers=${item.location.latitude},${item.location.longitude},red-pushpin` }} style={styles.locationImage} />
+                    <Text style={[styles.locationText, { color: isMe ? '#E7F2FF' : isDark ? '#9CCBFF' : '#0E5FB4' }]}>📍 {item.location.label ?? 'Abrir ubicación'}</Text>
                   </Pressable>
                 ) : null}
-                {item.text ? <Text style={[styles.messageText, { color: bubbleTextColor }]}>{item.text}</Text> : null}
+                {item.type === 'contact' && item.contact ? (
+                  <View style={[styles.contactCard, { backgroundColor: isMe ? '#1275DA' : isDark ? '#1C2737' : '#EAF2FF' }]}>
+                    <Text style={[styles.contactName, { color: bubbleTextColor }]}>{item.contact.name}</Text>
+                    {item.contact.phone ? <Text style={[styles.contactMeta, { color: bubbleTextColor }]}>{item.contact.phone}</Text> : null}
+                    {item.contact.email ? <Text style={[styles.contactMeta, { color: bubbleTextColor }]}>{item.contact.email}</Text> : null}
+                    <View style={styles.contactActions}>
+                      <Pressable onPress={() => user?.uid && item.contact?.userId && router.push(`/chat/${[user.uid, item.contact.userId].sort().join('_')}`)}><Text style={styles.contactActionText}>Chat</Text></Pressable>
+                      <Pressable onPress={() => item.contact?.phone && Linking.openURL(`tel:${item.contact.phone}`)}><Text style={styles.contactActionText}>Llamar</Text></Pressable>
+                    </View>
+                  </View>
+                ) : null}
+                {item.text && item.type !== 'contact' ? <Text style={[styles.messageText, { color: bubbleTextColor }]}>{item.text}</Text> : null}
                 {renderReactions(item)}
                 <View style={styles.messageMeta}>
                   <Text style={[styles.messageTime, { color: isMe ? '#DDEBFF' : isDark ? '#AEB8C9' : '#6A7587' }]}>{formatMessageTime(item.createdAt)}</Text>
@@ -663,11 +714,13 @@ export default function ConversationScreen() {
         {recordingDraftUri ? (
           <View style={[styles.audioDraftBar, { borderColor: palette.border, backgroundColor: palette.surface }]}> 
             <View style={styles.audioDraftMeta}>
-              <Ionicons name="mic" size={16} color={palette.accent} />
-              <Text style={[styles.audioDraftLabel, typography.body, { color: palette.textPrimary }]}>Audio listo para enviar</Text>
+              <Pressable style={styles.audioPreviewPlay} onPress={() => (draftPlayerStatus.playing ? draftPlayer.pause() : draftPlayer.play())}>
+                <Ionicons name={draftPlayerStatus.playing ? 'pause' : 'play'} size={15} color="#FFF" />
+              </Pressable>
+              <Text style={[styles.audioDraftLabel, typography.body, { color: palette.textPrimary }]}>Borrador de audio · {formatDuration(recordingSeconds)}</Text>
             </View>
             <View style={styles.audioDraftActions}>
-              <Pressable onPress={() => setRecordingDraftUri(null)} style={styles.audioDraftButton}>
+              <Pressable onPress={() => { setRecordingDraftUri(null); setDraftPlaybackUri(null); }} style={styles.audioDraftButton}>
                 <Text style={[styles.audioDraftCancel, typography.caption]}>Cancelar</Text>
               </Pressable>
               <Pressable
@@ -676,6 +729,7 @@ export default function ConversationScreen() {
                   try {
                     await sendAudio(recordingDraftUri);
                     setRecordingDraftUri(null);
+                    setDraftPlaybackUri(null);
                     shouldAutoScrollOnSizeRef.current = true;
                     scrollToBottom(true);
                   } catch (uploadError) {
@@ -836,6 +890,13 @@ const styles = StyleSheet.create({
   audioButton: { width: 26, height: 26, borderRadius: 13, backgroundColor: '#2C5D95', alignItems: 'center', justifyContent: 'center' },
   audioLabel: { fontSize: 12, color: '#DDE9F6' },
   locationText: { textDecorationLine: 'underline', fontWeight: '700' },
+  locationCard: { borderRadius: 12, overflow: 'hidden' },
+  locationImage: { width: 220, height: 110 },
+  contactCard: { borderRadius: 12, padding: 10, gap: 4 },
+  contactName: { fontSize: 14, fontWeight: '700' },
+  contactMeta: { fontSize: 12, opacity: 0.92 },
+  contactActions: { flexDirection: 'row', gap: 12, marginTop: 2 },
+  contactActionText: { color: '#FFFFFF', fontWeight: '700', fontSize: 12 },
   messageText: { fontSize: 15, lineHeight: 20 },
   meText: { color: '#FFFFFF' },
   messageMeta: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-end', gap: 4, marginTop: 2 },
@@ -874,6 +935,7 @@ const styles = StyleSheet.create({
   recordingText: { fontSize: 12 },
   audioDraftBar: { borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: 12, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   audioDraftMeta: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  audioPreviewPlay: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#1F7AE0', alignItems: 'center', justifyContent: 'center' },
   audioDraftLabel: { fontSize: 13 },
   audioDraftActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   audioDraftButton: { borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 },

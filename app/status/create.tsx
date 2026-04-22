@@ -3,10 +3,13 @@ import {
   RecordingPresets,
   requestRecordingPermissionsAsync,
   setAudioModeAsync,
+  useAudioPlayer,
+  useAudioPlayerStatus,
   useAudioRecorder,
 } from 'expo-audio';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
+import * as FileSystem from 'expo-file-system';
 import { Stack, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -50,9 +53,12 @@ export default function CreateStatusScreen() {
   const [isRecording, setIsRecording] = useState(false);
   const [audioUri, setAudioUri] = useState<string | null>(null);
   const [backgroundColor, setBackgroundColor] = useState<string>(TEXT_BG_COLORS[0]);
+  const audioPlayer = useAudioPlayer(audioUri || undefined);
+  const audioPlayerStatus = useAudioPlayerStatus(audioPlayer);
 
   useEffect(() => () => {
     recorder.stop().catch(() => undefined);
+    setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(() => undefined);
   }, [recorder]);
 
   const hasAnyContent = useMemo(() => Boolean(content.trim() || selectedImageUri || audioUri || location), [audioUri, content, location, selectedImageUri]);
@@ -81,6 +87,11 @@ export default function CreateStatusScreen() {
         setError('No se pudo obtener la imagen.');
         return;
       }
+      const info = await FileSystem.getInfoAsync(uri);
+      if (!info.exists) {
+        setError('El archivo seleccionado ya no está disponible.');
+        return;
+      }
       setSelectedImageUri(uri);
     } catch (pickError) {
       setError(pickError instanceof Error ? pickError.message : 'Error al seleccionar imagen.');
@@ -103,8 +114,12 @@ export default function CreateStatusScreen() {
     setError(null);
     if (isRecording) {
       await recorder.stop();
-      if (recorder.uri) setAudioUri(recorder.uri);
+      if (recorder.uri) {
+        const info = await FileSystem.getInfoAsync(recorder.uri);
+        if (info.exists) setAudioUri(recorder.uri);
+      }
       setIsRecording(false);
+      await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
       return;
     }
 
@@ -184,6 +199,15 @@ export default function CreateStatusScreen() {
             emojis={pickedEmojis}
             backgroundColor={backgroundColor}
           />
+          {audioUri ? (
+            <View style={[styles.audioDraft, { borderColor: palette.border, backgroundColor: palette.surface }]}>
+              <Pressable style={styles.audioPlay} onPress={() => (audioPlayerStatus.playing ? audioPlayer.pause() : audioPlayer.play())}>
+                <Ionicons name={audioPlayerStatus.playing ? 'pause' : 'play'} size={14} color="#FFF" />
+              </Pressable>
+              <Text style={[typography.body, { color: palette.textPrimary, flex: 1 }]}>Audio listo para publicar</Text>
+              <Pressable onPress={() => setAudioUri(null)}><Ionicons name="close-circle-outline" size={20} color={palette.textSecondary} /></Pressable>
+            </View>
+          ) : null}
 
           <StatusComposer value={content} onChangeText={setContent} editable={!saving} />
 
@@ -251,4 +275,6 @@ const styles = StyleSheet.create({
   publishText: { color: '#FFF', fontSize: 15 },
   error: { color: '#D93025', fontSize: 13 },
   recordingInfo: { fontSize: 12, textAlign: 'center' },
+  audioDraft: { borderWidth: 1, borderRadius: 14, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  audioPlay: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: '#1F7AE0' },
 });

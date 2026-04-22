@@ -140,6 +140,9 @@ export default function StatusScreen() {
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
       </ScrollView>
+      <Pressable style={styles.fab} onPress={() => router.push('/status/create')}>
+        <Ionicons name="camera" size={22} color="#FFF" />
+      </Pressable>
     </SafeAreaView>
   );
 }
@@ -148,7 +151,7 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#FFF' },
   header: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 },
   headerTitle: { fontSize: 34, fontWeight: '800', color: '#1A2B44' },
-  container: { paddingHorizontal: 16, paddingTop: 10, gap: 14, paddingBottom: 30 },
+  container: { paddingHorizontal: 16, paddingTop: 10, gap: 14, paddingBottom: 120 },
   myStatusCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -180,7 +183,7 @@ const styles = StyleSheet.create({
   },
   sectionHeader: { marginTop: 2, marginBottom: -2 },
   sectionTitle: { fontSize: 13, fontWeight: '700', letterSpacing: 0.3, textTransform: 'uppercase' },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 2 },
   statusTextWrap: { flex: 1 },
   storyRing: { width: 52, height: 52, borderRadius: 26, borderWidth: 3, backgroundColor: '#F5FAFF', alignItems: 'center', justifyContent: 'center' },
   storyRingUnread: { borderColor: '#1F7AE0' },
@@ -188,4 +191,19 @@ const styles = StyleSheet.create({
   title: { color: '#22354D', fontSize: 16 },
   subtitle: { color: '#6A7D95', marginTop: 1 },
   error: { color: '#D93025' },
+  fab: {
+    position: 'absolute',
+    right: 18,
+    bottom: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#1F7AE0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
 });

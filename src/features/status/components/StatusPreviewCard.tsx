@@ -26,7 +26,10 @@ export function StatusPreviewCard({ text, imageUri, audioUri, location, emojis, 
         {text.trim() ? <Text style={[styles.text, typography.accent, { color: hasMedia ? palette.textPrimary : '#FFFFFF' }]}>{text.trim()}</Text> : null}
         {!!emojis.length ? <Text style={styles.emojiText}>{emojis.join(' ')}</Text> : null}
         {location ? (
-          <View style={styles.metaRow}><Ionicons name="location" size={14} color={palette.accent} /><Text style={[styles.metaText, typography.body, { color: palette.textSecondary }]}>Ubicación adjunta</Text></View>
+          <View style={styles.locationCard}>
+            <Image source={{ uri: `https://staticmap.openstreetmap.de/staticmap.php?center=${location.latitude},${location.longitude}&zoom=14&size=380x170&markers=${location.latitude},${location.longitude},red-pushpin` }} style={styles.locationImage} />
+            <View style={styles.metaRow}><Ionicons name="location" size={14} color={palette.accent} /><Text style={[styles.metaText, typography.body, { color: palette.textSecondary }]}>{location.label ?? 'Ubicación adjunta'}</Text></View>
+          </View>
         ) : null}
         {audioUri ? (
           <View style={styles.metaRow}><Ionicons name="mic" size={14} color={palette.accent} /><Text style={[styles.metaText, typography.body, { color: palette.textSecondary }]}>Audio listo para publicar</Text></View>
@@ -47,6 +50,8 @@ const styles = StyleSheet.create({
   text: { fontSize: 18, lineHeight: 24 },
   emojiText: { fontSize: 24 },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  locationCard: { gap: 8 },
+  locationImage: { width: '100%', height: 120, borderRadius: 10 },
   metaText: { fontSize: 13 },
   empty: { textAlign: 'center', fontSize: 14 },
 });
