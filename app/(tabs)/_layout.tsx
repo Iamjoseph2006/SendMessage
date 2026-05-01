@@ -29,6 +29,7 @@ export default function TabLayout() {
         { name: 'index', title: 'Chats', icon: 'chatbubble-ellipses' },
         { name: 'calls', title: 'Llamadas', icon: 'call' },
         { name: 'status', title: 'Estados', icon: 'radio' },
+        { name: 'store', title: 'Tienda', icon: 'storefront' },
         { name: 'profile', title: 'Perfil', icon: 'person' },
       ].map((tab) => (
         <Tabs.Screen
